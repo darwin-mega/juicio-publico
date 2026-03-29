@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
+import { playTick, playClick } from '@/lib/sounds';
 
 export default function TrialPage() {
   const router = useRouter();
@@ -17,12 +18,15 @@ export default function TrialPage() {
     if (isRunning) {
       intervalRef.current = setInterval(() => {
         setSecondsLeft((s) => {
-          if (s <= 1) {
+          const next = s - 1;
+          // Tick sonoro en los últimos 10 segundos
+          if (s <= 11 && s > 1) playTick(s <= 4);
+          if (next <= 0) {
             setIsRunning(false);
             clearInterval(intervalRef.current!);
             return 0;
           }
-          return s - 1;
+          return next;
         });
       }, 1000);
     }

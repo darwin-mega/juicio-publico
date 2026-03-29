@@ -11,6 +11,8 @@ import { useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
 import { ROLE_LABELS } from '@/lib/game/state';
 import { ROLE_COLORS, ROLE_EMOJIS } from '@/lib/modes/table';
+import { useEffect } from 'react';
+import { playVictory, playDefeat, playExpelled, playClick } from '@/lib/sounds';
 
 export default function ResolutionPage() {
   const router = useRouter();
@@ -30,14 +32,30 @@ export default function ResolutionPage() {
   const aliveKillers = alivePlayers.filter((p) => p.role === 'killer').length;
 
   function handleNewRound() {
+    playClick();
     dispatch({ type: 'NEXT_PHASE' }); // resolution → operative + incrementa ronda
     router.push('/operative');
   }
 
   function handleRestart() {
+    playClick();
     clearSave(); // Limpia localStorage y resetea estado
     router.push('/');
   }
+
+  // Sonido al montar
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (state.isOver) {
+        if (state.winnerFaction === 'town') playVictory();
+        else playDefeat();
+      } else {
+        playExpelled();
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Pantalla de FIN DE PARTIDA ───────────────────────────
   if (state.isOver) {
