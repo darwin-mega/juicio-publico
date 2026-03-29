@@ -502,8 +502,15 @@ p  { color: var(--text-secondary); font-size: var(--text-base); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
+/* Barra de progreso del jingle — crece de 0 a 100% en la duración del jingle */
+@keyframes jingleProgress {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+
 /* Pulsación de color para victoria/derrota */
 @keyframes pulseDanger {
   0%, 100% { box-shadow: 0 0 0 0 rgba(224, 82, 82, 0); }
   50%       { box-shadow: 0 0 0 12px rgba(224, 82, 82, 0); }
 }
+
