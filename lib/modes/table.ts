@@ -1,6 +1,13 @@
 // ============================================================
 // lib/modes/table.ts
 // Lógica específica para el MODO MESA.
+//
+// FILOSOFÍA DE IDENTIDAD:
+//   - Todos los jugadores pasan el dispositivo el mismo tiempo.
+//   - El orden es completamente aleatorio (no por rol).
+//   - El operativo NO tiene un orden estructurado por rol, por lo
+//     que observar cuánto tiempo tiene alguien el teléfono no
+//     revela nada sobre su identidad.
 // ============================================================
 
 import { Player, Role } from '../game/state';
@@ -22,25 +29,25 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   killer:
     'Cada noche elegís a quién atacar. Tu objetivo es superar en número al pueblo. Coordiná en silencio con tus compañeros asesinos.',
   doctor:
-    'Cada noche elegís a quién proteger. Si salvás a la víctima, esa persona sobrevive. Nadie sabe que sos el Doctor.',
+    'Cada noche elegís a quién proteger. Si los asesinos atacan a esa persona, la salvarás. Nadie sabe que sos el Doctor.',
   cop:
-    'Cada noche investigás a un jugador y descubrís si es asesino o inocente. Esa información es solo tuya. Usala con estrategia.',
+    'Cada noche investigás a un jugador. El resultado se revela públicamente en las noticias del día siguiente.',
   town:
-    'No tenés acción nocturna. Tu poder está en el debate: convencé al grupo de quién es el sospechoso. El razonamiento es tu arma.',
+    'No tenés acción nocturna. Tu poder está en el debate: convencé al grupo de quién es el sospechoso.',
 };
 
 export const ROLE_EMOJIS: Record<Role, string> = {
   killer: '🔪',
   doctor: '🩺',
-  cop: '🔍',
-  town: '🏘️',
+  cop:    '🔍',
+  town:   '🏘️',
 };
 
 export const ROLE_COLORS: Record<Role, string> = {
   killer: 'var(--role-killer)',
   doctor: 'var(--role-doctor)',
-  cop: 'var(--role-cop)',
-  town: 'var(--role-town)',
+  cop:    'var(--role-cop)',
+  town:   'var(--role-town)',
 };
 
 export function getTeammates(player: Player, allPlayers: Player[]): Player[] {
@@ -52,38 +59,35 @@ export function getTeammates(player: Player, allPlayers: Player[]): Player[] {
 }
 
 export function getTeammateLabel(role: Role): string {
-  if (role === 'killer') return 'Sos Asesino. Tu cómplice es:';
-  if (role === 'cop') return 'Sos Policía. Tu compañero es:';
+  if (role === 'killer') return '🤝 Tu cómplice:';
+  if (role === 'cop')    return '🤝 Tu compañero:';
   return '';
 }
 
-// ─── Operativo encubierto — orden de turno ─────────────────
-
-/**
- * Genera un orden aleatorio de los jugadores vivos para el operativo.
- * El dispositivo se pasa en este orden para no revelar patrones.
- */
-export function generatePassOrder(players: Player[]): Player[] {
-  return shuffle(players.filter((p) => p.isAlive));
-}
-
 // ─── Operativo encubierto — tipos de acción ────────────────
+//
+// IMPORTANTE: el orden en que los jugadores pasan el dispositivo
+// es COMPLETAMENTE ALEATORIO (fixedPassOrder usa shuffle).
+// No existe un "orden por rol" — el doctor puede actuar antes que
+// el asesino y viceversa. Esto protege la identidad de todos.
+//
+// Como el resultado de la investigación policial solo se revela
+// en la sección de noticias (para todos juntos), la mecánica de
+// "cop-vote" (ver resultado inmediato) ya no existe.
 
 export type OperativeActionType =
-  | 'killer-single'    // único asesino: elige 1 objetivo directamente
-  | 'killer-propose'   // primer asesino (de 2+): propone 3 candidatos
-  | 'killer-vote'      // segundo asesino: elige 1 del listado del primero
-  | 'killer-done'      // 3.º+ asesino: neutral (coordinación ya hecha)
-  | 'doctor'           // elige 1 jugador para salvar
-  | 'cop-single'       // único policía: investiga 1 directamente
-  | 'cop-propose'      // primer policía: propone 3 candidatos
-  | 'cop-vote'         // segundo policía: elige 1 y ve resultado
-  | 'cop-done'         // policías adicionales: neutral (ya se investigó)
-  | 'town';            // pueblo: pantalla neutra
+  | 'killer-single'   // único asesino: elige 1 objetivo
+  | 'killer-propose'  // primer asesino (de 2+): propone candidatos
+  | 'killer-vote'     // segundo asesino: elige uno de los proposals
+  | 'killer-done'     // asesino adicional (3.º+): ya coordinaron
+  | 'doctor'          // elige 1 jugador para proteger
+  | 'cop'             // elige 1 jugador para investigar (sin ver resultado)
+  | 'cop-done'        // cop adicional: ya coordinaron
+  | 'town';           // pueblo: pantalla neutra (misma duración que el resto)
 
 /**
- * Retorna el tipo de acción que debe ver un jugador en el operativo,
- * dado el estado acumulado de acciones en esa ronda.
+ * Retorna el tipo de acción para el jugador según su rol y el avance
+ * de la ronda. Todos los jugadores pasan exactamente una vez.
  */
 export function getOperativeAction(
   player: Player,
@@ -97,27 +101,23 @@ export function getOperativeAction(
       if (aliveKillerCount === 1) return 'killer-single';
       if (killerActedCount === 0) return 'killer-propose';
       if (killerActedCount === 1) return 'killer-vote';
-      return 'killer-done';
+      return 'killer-done'; // 3.º asesino en adelante
+
     case 'doctor':
       return 'doctor';
+
     case 'cop':
-      if (aliveCopCount === 1) return 'cop-single';
-      if (copActedCount === 0) return 'cop-propose';
-      if (copActedCount === 1) return 'cop-vote';
+      // Con 2 policías: el primero propone, el segundo confirma.
+      // Ninguno ve el resultado — se revela en noticias.
+      if (aliveCopCount === 1) return 'cop';
+      if (copActedCount === 0) return 'cop'; // primer cop: propone
+      if (copActedCount === 1) return 'cop'; // segundo cop: confirma
       return 'cop-done';
+
     case 'town':
     default:
       return 'town';
   }
-}
-
-/**
- * Determina si el rol investigado es asesino o no.
- * Esta función vive en el módulo de mesa porque la revelación
- * del resultado solo ocurre en modo mesa (el cop lo ve inmediatamente).
- */
-export function evaluateInspection(target: Player): 'killer' | 'innocent' {
-  return target.role === 'killer' ? 'killer' : 'innocent';
 }
 
 // ─── Mensajes de traspaso ──────────────────────────────────
