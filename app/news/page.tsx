@@ -8,6 +8,7 @@ import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
 import {
   playNewsJingle, playDeath, playSaved, playCalm,
   playAccusation, playInnocent, playClick, playTransition,
+  startBackgroundMusic,
 } from '@/lib/sounds';
 
 type Stage = 'jingle' | 'main' | 'cop' | 'done';
@@ -70,8 +71,17 @@ export default function NewsPage() {
     return () => clearTimeout(t);
   }, [stage, newsEvent?.cop?.isKiller]);
 
-  function goToTrial() { playTransition(); dispatch({ type: 'NEXT_PHASE' }); router.push('/trial'); }
-  function goToResolution() { playTransition(); router.push('/resolution'); }
+  function goToTrial() { 
+    playTransition(); 
+    dispatch({ type: 'NEXT_PHASE' }); 
+    startBackgroundMusic(); // Volver a la música global tras las noticias
+    router.push('/trial'); 
+  }
+  function goToResolution() { 
+    playTransition(); 
+    startBackgroundMusic(); // Volver a la música global tras las noticias
+    router.push('/resolution'); 
+  }
 
   // Retorno temprano movido aquí para cumplir las reglas de hooks
   if (state.players.length === 0) return null;

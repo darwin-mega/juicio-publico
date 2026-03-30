@@ -406,6 +406,7 @@ import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
 import {
   playNewsJingle, playDeath, playSaved, playCalm,
   playAccusation, playInnocent, playClick, playTransition,
+  startBackgroundMusic,
 } from '@/lib/sounds';
 
 type NewsStage = 'jingle' | 'main' | 'cop' | 'done';
@@ -611,6 +612,11 @@ function TrialView({
   const [elapsed, setElapsed] = useState(0);
   const duration = room.config.trialDurationSeconds;
   const startedAt = room.game?.trialStartedAt ?? Date.now();
+
+  useEffect(() => {
+    // Al entrar al juicio, aseguramos que la música de fondo esté sonando
+    startBackgroundMusic();
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -857,6 +863,11 @@ function ResolutionView({
   const lastReport = room.game?.reports[room.game.reports.length - 1];
   const isOver = room.game?.isOver ?? false;
   const winner = room.game?.winnerFaction;
+
+  useEffect(() => {
+    // Al entrar a la resolución, aseguramos que regrese la música global si no estaba
+    startBackgroundMusic();
+  }, []);
 
   if (isOver) {
     return (
