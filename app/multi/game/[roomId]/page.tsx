@@ -406,7 +406,7 @@ import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
 import {
   playNewsJingle, playDeath, playSaved, playCalm,
   playAccusation, playInnocent, playClick, playTransition,
-  startBackgroundMusic,
+  startBackgroundMusic, playVictory, playDefeat, playExpelled
 } from '@/lib/sounds';
 
 type NewsStage = 'jingle' | 'main' | 'cop' | 'done';
@@ -865,9 +865,22 @@ function ResolutionView({
   const winner = room.game?.winnerFaction;
 
   useEffect(() => {
-    // Al entrar a la resolución, aseguramos que regrese la música global si no estaba
+    // 1. Al entrar a la resolución, aseguramos que regrese la música global si no estaba
     startBackgroundMusic();
-  }, []);
+
+    // 2. Disparar sonidos de veredicto
+    const t = setTimeout(() => {
+      // Nota: Si es multijugador presencial, el host es el que suele tener el sonido alto
+      if (isOver) {
+        if (winner === 'town') playVictory();
+        else playDefeat();
+      } else if (lastReport?.expelled) {
+        playExpelled();
+      }
+    }, 400);
+
+    return () => clearTimeout(t);
+  }, [isOver, winner, lastReport?.expelled]);
 
   if (isOver) {
     return (

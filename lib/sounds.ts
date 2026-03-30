@@ -182,7 +182,29 @@ export function playAccusation() {
   osc.start(); osc.stop(c.currentTime + 1.25);
 }
 export function playInnocent() { tone(550, 0.4, 'sine', 0.2, 0, 660); tone(440, 0.5, 'sine', 0.15, 0.25); }
-export function playVictory() { let t = 0; [523, 659, 784, 1046, 784, 1046].forEach((f) => { tone(f, 0.4, 'sine', 0.2, t); t += 0.15; }); }
-export function playDefeat() { [392, 330, 262].forEach((f, i) => tone(f, 1.0, 'sawtooth', 0.2, i * 0.3)); }
-export function playExpelled() { tone(200, 0.8, 'square', 0.2, 0, 100); noise(0.5, 0.2, 0.1, 400); }
+export function playVictory() { 
+  // Arpegio heroico ascendente con brillo
+  const c = getCtx(); if (!c) return;
+  [523.25, 659.25, 783.99, 1046.50].forEach((f, i) => {
+    tone(f, 0.6, 'sine', 0.15, i * 0.1);
+    tone(f, 0.4, 'triangle', 0.1, i * 0.1); // Armónico
+  });
+  setTimeout(() => tone(1318.51, 1.2, 'sine', 0.2, 0, 1318.51), 400);
+}
+
+export function playDefeat() { 
+  // Caída dramática y sombría
+  [392, 311, 261, 196].forEach((f, i) => {
+    tone(f, 1.2, 'sawtooth', 0.15, i * 0.25, f * 0.8);
+    noise(0.6, 0.1, i * 0.25, 300);
+  });
+}
+
+export function playExpelled() { 
+  // Impacto de martillo / sentencia
+  tone(100, 0.6, 'square', 0.3, 0, 40); 
+  noise(0.4, 0.25, 0, 500); 
+  tone(60, 0.8, 'sine', 0.4, 0.05); 
+}
+
 export function playTick(isLast = false) { tone(isLast ? 1200 : 800, 0.04, 'sine', isLast ? 0.3 : 0.15); }
