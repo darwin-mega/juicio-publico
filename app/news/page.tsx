@@ -25,13 +25,17 @@ export default function NewsPage() {
   const alivePlayers = state.players.filter((p) => p.isAlive);
   const hasCop = !!newsEvent?.cop;
 
-  if (state.players.length === 0) { router.replace('/'); return null; }
-
   const eventColor = newsEvent ? NEWS_COLORS[newsEvent.type] : 'var(--accent)';
   const eventIcon  = newsEvent ? NEWS_ICONS[newsEvent.type]  : '📡';
 
   // ── Secuencia de revelación ───────────────────────────────
   useEffect(() => {
+    // Redirección segura dentro del hook
+    if (state.players.length === 0) {
+      router.replace('/');
+      return;
+    }
+
     // Jingle inmediato al montar
     playNewsJingle();
 
@@ -64,10 +68,13 @@ export default function NewsPage() {
       setTimeout(() => setStage('done'), 3200);
     }, 800);
     return () => clearTimeout(t);
-  }, [stage]);
+  }, [stage, newsEvent?.cop?.isKiller]);
 
   function goToTrial() { playTransition(); dispatch({ type: 'NEXT_PHASE' }); router.push('/trial'); }
   function goToResolution() { playTransition(); router.push('/resolution'); }
+
+  // Retorno temprano movido aquí para cumplir las reglas de hooks
+  if (state.players.length === 0) return null;
 
   // ── FASE JINGLE — pantalla de apertura ────────────────────
   if (stage === 'jingle') {

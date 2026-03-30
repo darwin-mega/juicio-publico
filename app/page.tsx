@@ -1,12 +1,31 @@
+// app/page.tsx
 'use client';
 
 import { useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
+import { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
 
 export default function HomePage() {
   const router = useRouter();
   const { dispatch, clearSave, hasSave, state } = useGame();
+  
+  // Estado para controlar el video de apertura
+  const [showIntro, setShowIntro] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Intentar detectar si ya se vio el intro en esta sesión
+  useEffect(() => {
+    const hasSeenIntro = sessionStorage.getItem('jp_intro_seen');
+    if (hasSeenIntro) {
+      setShowIntro(false);
+    }
+  }, []);
+
+  function handleSkipIntro() {
+    setShowIntro(false);
+    sessionStorage.setItem('jp_intro_seen', 'true');
+  }
 
   function handleNewGame() {
     dispatch({ type: 'RESET' });
@@ -14,7 +33,6 @@ export default function HomePage() {
   }
 
   function handleResumeGame() {
-    // Continuar desde donde quedó, según la fase actual
     const phase = state.phase;
     const phaseRoutes: Record<string, string> = {
       operative: '/operative',
@@ -31,6 +49,76 @@ export default function HomePage() {
     if (confirm('¿Seguro? Se borrará la partida guardada y no podrás recuperarla.')) {
       clearSave();
     }
+  }
+
+  // Si estamos mostrando el intro, renderizamos el video overlay
+  if (showIntro) {
+    return (
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        background: '#000',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          preload="auto"
+          onEnded={handleSkipIntro}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover'
+          }}
+        >
+          <source src="/Video/trailer-el-juicio.mp4" type="video/mp4" />
+          Tu navegador no soporta video.
+        </video>
+
+        {/* Botón Saltar */}
+        <button
+          onClick={handleSkipIntro}
+          style={{
+            position: 'absolute',
+            bottom: 'var(--sp-2xl)',
+            right: 'var(--sp-xl)',
+            background: 'rgba(0,0,0,0.6)',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.3)',
+            padding: '10px 24px',
+            borderRadius: 'var(--radius-full)',
+            fontSize: 'var(--text-sm)',
+            fontWeight: 800,
+            letterSpacing: '0.1em',
+            zIndex: 10,
+            backdropFilter: 'blur(8.2px)',
+            cursor: 'pointer'
+          }}
+        >
+          SALTAR INTRO ➔
+        </button>
+
+        {/* Tip: Si el video no arranca solo (Chrome/Safari suelen bloquearlo) */}
+        <div style={{
+          position: 'absolute',
+          top: 'var(--sp-xl)',
+          width: '100%',
+          textAlign: 'center',
+          color: 'rgba(255,255,255,0.4)',
+          fontSize: 'var(--text-xs)',
+          pointerEvents: 'none'
+        }}>
+          Reproduciendo intro...
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -83,7 +171,7 @@ export default function HomePage() {
       }}>
 
         {/* Logo */}
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative', animation: 'fadeInDown 0.8s ease-out' }}>
           <div aria-hidden style={{
             position: 'absolute',
             inset: -20,
@@ -108,7 +196,7 @@ export default function HomePage() {
         </div>
 
         {/* Tagline */}
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' }}>
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)', animation: 'fadeIn 1s 0.3s both' }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -180,6 +268,7 @@ export default function HomePage() {
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--sp-sm)',
+              animation: 'slideUp 0.6s 0.5s both'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -206,6 +295,7 @@ export default function HomePage() {
         flexDirection: 'column',
         gap: 'var(--sp-sm)',
         padding: 'var(--sp-lg) 0 calc(var(--sp-xl) + env(safe-area-inset-bottom))',
+        animation: 'slideUp 0.6s 0.6s both'
       }}>
         {hasSave && state.players.length > 0 && (
           <button
@@ -267,7 +357,16 @@ export default function HomePage() {
           0%, 100% { opacity: 0.7; transform: scale(1); }
           50%       { opacity: 1;   transform: scale(1.08); }
         }
+        @keyframes fadeInDown {
+          from { opacity: 0; transform: translateY(-30px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
       `}</style>
     </main>
   );
 }
+
