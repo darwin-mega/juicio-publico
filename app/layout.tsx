@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { GameProvider } from '@/context/GameContext';
 import { MultiRoomProvider } from '@/context/MultiRoomContext';
+import GlobalAudio from '@/components/GlobalAudio';
 
 export const metadata: Metadata = {
   title: 'Juicio Público',
@@ -14,6 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <GameProvider>
           <MultiRoomProvider>
+            <GlobalAudio />
             {children}
           </MultiRoomProvider>
         </GameProvider>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
 import { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
+import { startBackgroundMusic } from '@/lib/sounds';
 
 export default function HomePage() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function HomePage() {
     if (hasSeenIntro) {
       setShowIntro(false);
       setPreInteraction(false);
+      startBackgroundMusic(); // Iniciar música si ya se interactuó previamente
     }
   }, []);
 
@@ -28,6 +30,7 @@ export default function HomePage() {
     setShowIntro(false);
     setPreInteraction(false);
     sessionStorage.setItem('jp_intro_seen', 'true');
+    startBackgroundMusic();
   }
 
   function handleStartIntro() {
@@ -40,6 +43,11 @@ export default function HomePage() {
         console.warn("Autoplay con sonido bloqueado incluso tras clic");
       });
     }
+
+    // La música de fondo empezará después del trailer (o junto a él si se prefiere)
+    // Pero como el trailer ya tiene sonido, podríamos esperar o ponerla muy baja.
+    // Aquí la iniciamos para asegurar el contexto de audio.
+    startBackgroundMusic();
   }
 
   function handleNewGame() {

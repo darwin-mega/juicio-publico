@@ -1,9 +1,15 @@
 // ============================================================
-// lib/sounds.ts — Sistema de sonido profesional con buffers y síntesis
+// lib/sounds.ts — Sistema de sonido profesional con música y mute
 // ============================================================
 
 let ctx: AudioContext | null = null;
 const bufferCache: Record<string, AudioBuffer> = {};
+let isMuted = false;
+
+// ── Control de Música ────────────────────────────────────────
+let bgMusicSource: AudioBufferSourceNode | null = null;
+let bgMusicGain: GainNode | null = null;
+const BG_MUSIC_VOL = 0.12; // 12% de volumen solicitado
 
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -19,6 +25,24 @@ function resume() {
   const c = getCtx();
   if (c && c.state === 'suspended') c.resume();
 }
+
+/** 
+ * Cambia el estado global de silencio 
+ */
+export function toggleMute() {
+  isMuted = !isMuted;
+  const c = getCtx();
+  if (!c) return isMuted;
+
+  // Si hay música sonando, actualizamos su volumen
+  if (bgMusicGain) {
+    bgMusicGain.gain.setValueAtTime(isMuted ? 0 : BG_MUSIC_VOL, c.currentTime);
+  }
+  
+  return isMuted;
+}
+
+export function getIsMuted() { return isMuted; }
 
 /**
  * Carga un archivo de audio de la carpeta /public
@@ -41,11 +65,11 @@ async function loadFile(url: string): Promise<AudioBuffer | null> {
 }
 
 /**
- * Reproduce un buffer (muestreo)
+ * Reproduce un buffer (muestreo) de forma puntual
  */
 function playBuffer(buffer: AudioBuffer, vol = 0.5) {
-  const c = getCtx();
-  if (!c) return;
+  if (isMuted) return;
+  const c = getCtx(); if (!c) return;
   resume();
   const src = c.createBufferSource();
   const gain = c.createGain();
@@ -56,6 +80,39 @@ function playBuffer(buffer: AudioBuffer, vol = 0.5) {
   src.start(0);
 }
 
+// ── Música de Fondo ──────────────────────────────────────────
+
+/** Inicia la música de fondo en loop (noticias.mp3 al 12%) */
+export async function startBackgroundMusic() {
+  const c = getCtx(); if (!c) return;
+  resume();
+
+  if (bgMusicSource) return; // Ya está sonando
+
+  const buffer = await loadFile('/Music/noticias.mp3');
+  if (!buffer) return;
+
+  bgMusicSource = c.createBufferSource();
+  bgMusicGain = c.createGain();
+  
+  bgMusicSource.buffer = buffer;
+  bgMusicSource.loop = true;
+  
+  bgMusicSource.connect(bgMusicGain);
+  bgMusicGain.connect(c.destination);
+  
+  bgMusicGain.gain.setValueAtTime(isMuted ? 0 : BG_MUSIC_VOL, c.currentTime);
+  bgMusicSource.start(0);
+}
+
+export function stopBackgroundMusic() {
+  if (bgMusicSource) {
+    try { bgMusicSource.stop(); } catch {}
+    bgMusicSource = null;
+    bgMusicGain = null;
+  }
+}
+
 // ── Helpers de Síntesis "Pro" ────────────────────────────────
 
 function tone(
@@ -64,6 +121,7 @@ function tone(
   vol = 0.3, delay = 0,
   freqEnd?: number
 ) {
+  if (isMuted) return;
   const c = getCtx(); if (!c) return;
   resume();
   const osc  = c.createOscillator();
@@ -74,16 +132,16 @@ function tone(
   if (freqEnd !== undefined)
     osc.frequency.exponentialRampToValueAtTime(freqEnd, c.currentTime + delay + dur);
 
-  // Envelope ADSR simplificado
   gain.gain.setValueAtTime(0, c.currentTime + delay);
-  gain.gain.linearRampToValueAtTime(vol, c.currentTime + delay + 0.015); // Attack
-  gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + delay + dur); // Decay/Release
+  gain.gain.linearRampToValueAtTime(vol, c.currentTime + delay + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + delay + dur);
   
   osc.start(c.currentTime + delay);
   osc.stop(c.currentTime + delay + dur + 0.05);
 }
 
 function noise(dur: number, vol = 0.15, delay = 0, filterFreq?: number) {
+  if (isMuted) return;
   const c = getCtx(); if (!c) return;
   resume();
   const buf  = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
@@ -142,26 +200,19 @@ export function playConfirm() {
 
 // ── Sonidos de Noticias ───────────────────────────────────────
 
-/**
- * Reproduce el jingle de noticias real si está disponible,
- * o una síntesis mejorada de respaldo.
- */
 export async function playNewsJingle() {
-  // Intentamos cargar el archivo real (se encuentra en public/Music/noticias.mp3)
   const buffer = await loadFile('/Music/noticias.mp3');
   if (buffer) {
     playBuffer(buffer, 0.6);
     return;
   }
-
-  // Respaldo Sintetizado (si falla la carga)
   const c = getCtx(); if (!c) return; resume();
-  tone(60, 0.5, 'sine', 0.6, 0, 40); // Golpe bajo
+  tone(60, 0.5, 'sine', 0.6, 0, 40);
   [330, 392, 494, 659].forEach((f, i) => tone(f, 0.3, 'sawtooth', 0.15, 0.4 + i * 0.12));
   [392, 440, 494, 440, 392, 330].forEach((f, i) => tone(f, 0.2, 'triangle', 0.2, 1.35 + i * 0.15));
 }
 
-// ── Sonidos de Gameplay ───────────────────────────────────────
+// ── Sfx Gameplay ──────────────────────────────────────────────
 
 export function playTension() {
   [0, 0.4].forEach((d) => {
@@ -191,7 +242,7 @@ export function playAccusation() {
   const gain = c.createGain();
   osc.connect(gain); gain.connect(c.destination);
   osc.type = 'sawtooth';
-  gain.gain.setValueAtTime(0.2, c.currentTime);
+  gain.gain.setValueAtTime(isMuted ? 0 : 0.2, c.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 1.2);
   osc.frequency.setValueAtTime(800, c.currentTime);
   osc.frequency.exponentialRampToValueAtTime(1200, c.currentTime + 0.15);
