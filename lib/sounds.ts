@@ -147,8 +147,8 @@ export function playConfirm() {
  * o una síntesis mejorada de respaldo.
  */
 export async function playNewsJingle() {
-  // Intentamos cargar el archivo real (debe estar en public/music/noticias.mp3)
-  const buffer = await loadFile('/music/noticias.mp3');
+  // Intentamos cargar el archivo real (se encuentra en public/Music/noticias.mp3)
+  const buffer = await loadFile('/Music/noticias.mp3');
   if (buffer) {
     playBuffer(buffer, 0.6);
     return;
