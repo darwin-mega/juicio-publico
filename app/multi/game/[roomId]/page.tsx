@@ -400,8 +400,16 @@ function OperativeView({
 }
 
 // =============================================================
-// Sub-vista: Noticias públicas
+// Sub-vista: Noticias públicas (Cinemática igual que modo mesa)
 // =============================================================
+import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
+import {
+  playNewsJingle, playDeath, playSaved, playCalm,
+  playAccusation, playInnocent, playClick, playTransition,
+} from '@/lib/sounds';
+
+type NewsStage = 'jingle' | 'main' | 'cop' | 'done';
+
 function NewsView({
   room,
   isHost,
@@ -413,87 +421,175 @@ function NewsView({
   onAdvance: () => void;
   advancing: boolean;
 }) {
+  const [stage, setStage] = useState<NewsStage>('jingle');
+  const [copRevealed, setCopRevealed] = useState(false);
+  const [headlineReady, setHeadlineReady] = useState(false);
+  const [playedForRound, setPlayedForRound] = useState<number | null>(null);
+
   const lastReport = room.game?.reports[room.game.reports.length - 1];
+  const newsEvent = lastReport ? deriveNewsEvent(lastReport) : null;
+  const hasCop = !!newsEvent?.cop;
+  const currentRound = room.game?.round ?? 0;
+
+  // ── Secuencia de revelación ───────────────────────────────
+  useEffect(() => {
+    // Si ya procesamos esta ronda, saltamos al final para no repetir cinemática al recargar
+    if (playedForRound === currentRound) {
+      setStage('done');
+      setCopRevealed(true);
+      setHeadlineReady(true);
+      return;
+    }
+
+    // Jingle inmediato
+    playNewsJingle();
+    setPlayedForRound(currentRound);
+
+    // Secuencia igual a Modo Mesa
+    const t1 = setTimeout(() => {
+      setStage('main');
+      setHeadlineReady(true);
+      if      (newsEvent?.type === 'death') setTimeout(playDeath, 300);
+      else if (newsEvent?.type === 'saved') setTimeout(playSaved, 300);
+      else                                   setTimeout(playCalm,  300);
+    }, 3300);
+
+    const t2 = hasCop
+      ? setTimeout(() => setStage('cop'), 6800)
+      : setTimeout(() => setStage('done'), 6500);
+
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [currentRound, playedForRound, newsEvent, hasCop]);
+
+  // Revelar resultado policial con sonido
+  useEffect(() => {
+    if (stage !== 'cop' || copRevealed) return;
+    const t = setTimeout(() => {
+      setCopRevealed(true);
+      if (newsEvent?.cop?.isKiller) playAccusation();
+      else                          playInnocent();
+      setTimeout(() => setStage('done'), 3200);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [stage, copRevealed, newsEvent?.cop?.isKiller]);
+
+  const eventColor = newsEvent ? NEWS_COLORS[newsEvent.type] : 'var(--accent)';
+  const eventIcon  = newsEvent ? NEWS_ICONS[newsEvent.type]  : '📡';
+
+  // --- Renderizado Jingle ---
+  if (stage === 'jingle') {
+    return (
+      <main className="page-shell" style={{ justifyContent: 'center', textAlign: 'center', background: 'var(--bg-base)' }}>
+        <div className="anim-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-xl)', alignItems: 'center' }}>
+          <div style={{
+            display: 'inline-flex', gap: 8, alignItems: 'center',
+            padding: '6px 18px', borderRadius: 'var(--radius-full)',
+            background: '#e05252', color: '#fff',
+            fontSize: 'var(--text-sm)', fontWeight: 800, letterSpacing: '0.12em',
+            animation: 'blink 0.8s ease-in-out infinite',
+          }}>
+            ● EN VIVO
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontSize: 64, animation: 'float 2.5s ease-in-out infinite' }}>📡</div>
+            <h1 style={{ fontSize: 'clamp(2rem, 8vw, 3.5rem)', letterSpacing: '0.08em' }}>
+              NOTICIAS<br />DE ÚLTIMO MOMENTO
+            </h1>
+          </div>
+          <div style={{ width: '70%', maxWidth: 300 }}>
+            <div className="loading-bar">
+              <div style={{
+                height: '100%', background: 'linear-gradient(90deg, var(--accent), #e05252)',
+                animation: 'jingleProgress 3.2s linear both',
+              }} />
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="page-shell">
       <div className="page-header">
-        <div className="phase-badge">📰 Noticias de último momento</div>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '3px 12px', borderRadius: 'var(--radius-full)',
+          background: '#e05252', color: '#fff',
+          fontSize: 'var(--text-xs)', fontWeight: 800,
+        }}>
+          ● EN VIVO
+        </div>
         <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-          Ronda {room.game?.round}
+          Ronda {currentRound}
         </span>
       </div>
 
       <div className="page-content">
-        {lastReport ? (
-          <>
-            {lastReport.victim ? (
-              <div className="card" style={{ borderColor: 'var(--danger)', textAlign: 'center', padding: 'var(--sp-xl)' }}>
-                <div style={{ fontSize: 48, marginBottom: 'var(--sp-sm)' }}>💀</div>
-                <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Fue eliminado/a</p>
-                <h2 style={{ color: 'var(--danger)', margin: 'var(--sp-sm) 0' }}>{lastReport.victim}</h2>
-                {lastReport.saved && (
-                  <p style={{ color: 'var(--success)', fontSize: 'var(--text-sm)' }}>
-                    ✅ Fue salvado por el Doctor
-                  </p>
-                )}
-              </div>
-            ) : lastReport.saved ? (
-              <div className="card" style={{ borderColor: 'var(--success)', textAlign: 'center', padding: 'var(--sp-xl)' }}>
-                <div style={{ fontSize: 48, marginBottom: 'var(--sp-sm)' }}>🛡️</div>
-                <h3 style={{ color: 'var(--success)' }}>¡Nadie murió esta noche!</h3>
-                <p className="text-muted" style={{ marginTop: 8 }}>
-                  El Doctor llegó a tiempo y protegió al objetivo.
-                </p>
-              </div>
-            ) : (
-              <div className="card" style={{ textAlign: 'center', padding: 'var(--sp-xl)' }}>
-                <div style={{ fontSize: 48, marginBottom: 'var(--sp-sm)' }}>🌙</div>
-                <h3>Una noche sin incidentes</h3>
-                <p className="text-muted" style={{ marginTop: 8 }}>No hubo víctimas esta noche.</p>
+        {headlineReady && newsEvent && (
+          <div className="card anim-reveal" style={{ borderColor: eventColor, padding: 'var(--sp-lg)', textAlign: 'center' }}>
+            <div style={{ fontSize: 60, marginBottom: 'var(--sp-md)' }}>{eventIcon}</div>
+            <h2 style={{ fontSize: 'var(--text-lg)', marginBottom: 'var(--sp-sm)' }}>{newsEvent.headline}</h2>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>{newsEvent.detail}</p>
+            {newsEvent.victimName && (
+              <div style={{ marginTop: 'var(--sp-md)', padding: 'var(--sp-sm)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: `1px solid ${eventColor}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="player-avatar" style={{ borderColor: eventColor }}>{newsEvent.victimName[0]?.toUpperCase()}</div>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Identidad confirmada</div>
+                  <div style={{ fontWeight: 700, color: eventColor }}>{newsEvent.victimName}</div>
+                </div>
               </div>
             )}
+          </div>
+        )}
 
-            {/* Jugadores vivos */}
-            <div>
-              <span className="form-label">Jugadores vivos — {room.players.filter(p => p.isAlive).length}</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)', marginTop: 'var(--sp-sm)' }}>
-                {room.players.map((p) => (
-                  <div key={p.deviceId} className="player-card" style={{
-                    opacity: p.isAlive ? 1 : 0.4,
-                  }}>
-                    <div className="player-avatar">{p.name[0]?.toUpperCase()}</div>
-                    <span className="player-name">{p.name}</span>
-                    {!p.isAlive && <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Eliminado</span>}
-                  </div>
-                ))}
+        {(stage === 'cop' || stage === 'done') && hasCop && (
+          <div className="anim-slide-up">
+            {!copRevealed ? (
+              <div className="card" style={{ textAlign: 'center', padding: 'var(--sp-xl)', borderColor: 'var(--role-cop)' }}>
+                <div style={{ fontSize: 40, animation: 'float 1.5s ease-in-out infinite' }}>🔍</div>
+                <h3>Informe de la investigación</h3>
+                <div className="loading-bar" style={{ marginTop: 20 }}><div className="loading-bar-progress" /></div>
               </div>
+            ) : (
+              <div className="card anim-reveal" style={{ textAlign: 'center', padding: 'var(--sp-xl)', borderColor: newsEvent!.cop!.isKiller ? 'var(--danger)' : 'var(--success)', background: newsEvent!.cop!.isKiller ? 'rgba(224,82,82,0.08)' : 'rgba(76,175,130,0.08)' }}>
+                <div style={{ fontSize: 56 }}>{newsEvent!.cop!.isKiller ? '🚨' : '✅'}</div>
+                <h3 style={{ color: newsEvent!.cop!.isKiller ? 'var(--danger)' : 'var(--success)' }}>
+                  {newsEvent!.cop!.isKiller ? '¡La policía tiene un asesino!' : 'La persona es inocente.'}
+                </h3>
+                <p style={{ fontSize: 'var(--text-sm)', marginTop: 8 }}>{newsEvent!.cop!.message}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {stage === 'done' && (
+          <div className="anim-slide-up">
+            <span className="form-label">Jugadores vivos — {room.players.filter(p => p.isAlive).length}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)', marginTop: 'var(--sp-sm)' }}>
+              {room.players.map((p) => (
+                <div key={p.deviceId} className={`player-card ${!p.isAlive ? 'eliminated' : ''}`}>
+                  <div className="player-avatar">{p.name[0]?.toUpperCase()}</div>
+                  <span className="player-name">{p.name}</span>
+                  {!p.isAlive && <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Eliminado</span>}
+                </div>
+              ))}
             </div>
-          </>
-        ) : (
-          <div className="card" style={{ textAlign: 'center', padding: 'var(--sp-xl)' }}>
-            <p>Cargando noticias...</p>
           </div>
         )}
       </div>
 
-      <div className="page-footer">
-        {isHost ? (
-          <button
-            id="btn-ir-a-juicio"
-            className="btn btn-primary"
-            onClick={onAdvance}
-            disabled={advancing}
-            style={{ fontSize: 'var(--text-md)', padding: '16px' }}
-          >
-            {advancing ? 'Avanzando...' : '⚖️ Ir al Juicio Público →'}
-          </button>
-        ) : (
-          <div className="info-box" style={{ textAlign: 'center' }}>
-            El host controlará cuándo comenzar el debate.
-          </div>
-        )}
-      </div>
+      {stage === 'done' && (
+        <div className="page-footer anim-slide-up">
+          {isHost ? (
+            <button className="btn btn-primary" onClick={() => { playTransition(); onAdvance(); }} disabled={advancing}>
+              {advancing ? 'Avanzando...' : '⚖️ Ir al Juicio Público →'}
+            </button>
+          ) : (
+            <div className="info-box" style={{ textAlign: 'center' }}>Esperando que el host inicie el debate.</div>
+          )}
+        </div>
+      )}
     </main>
   );
 }

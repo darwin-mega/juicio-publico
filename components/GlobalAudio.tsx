@@ -6,10 +6,15 @@ import { toggleMute, getIsMuted, startBackgroundMusic } from '@/lib/sounds';
 export default function GlobalAudio() {
   const [muted, setMuted] = useState(getIsMuted());
 
-  // Al montar, intentamos iniciar la música (solo funcionará si el context ya se reanudó)
+  // Al montar, intentamos iniciar la música
   useEffect(() => {
-    // Si ya hubo una interacción previa en la sesión, intentamos arrancar
-    if (sessionStorage.getItem('jp_intro_seen')) {
+    const hasSeenIntro = sessionStorage.getItem('jp_intro_seen');
+    const isInGame = window.location.pathname.includes('/multi/') || 
+                     window.location.pathname.includes('/room') ||
+                     window.location.pathname.includes('/join/');
+    
+    // Si ya hubo una interacción previa o estamos en una partida, intentamos arrancar
+    if (hasSeenIntro || isInGame) {
       startBackgroundMusic();
     }
   }, []);
