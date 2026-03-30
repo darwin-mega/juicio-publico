@@ -224,7 +224,20 @@ export default function HomePage() {
           onClick={handleNewGame}
           style={{ fontSize: 'var(--text-md)', padding: '16px' }}
         >
-          ⚖️&nbsp;Nueva Partida
+          ⚖️&nbsp;Nueva Partida — Modo Mesa
+        </button>
+
+        <button
+          id="btn-modo-multi"
+          className="btn btn-ghost"
+          onClick={() => router.push('/multi/create')}
+          style={{
+            fontSize: 'var(--text-md)', padding: '16px',
+            borderColor: 'rgba(108,99,255,0.4)',
+            color: 'var(--accent)',
+          }}
+        >
+          🌐&nbsp;Modo Multidispositivo
         </button>
 
         {hasSave && (
