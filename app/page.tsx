@@ -12,6 +12,7 @@ export default function HomePage() {
   
   // Estado para controlar el video de apertura
   const [showIntro, setShowIntro] = useState(true);
+  const [preInteraction, setPreInteraction] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Intentar detectar si ya se vio el intro en esta sesión
@@ -19,12 +20,26 @@ export default function HomePage() {
     const hasSeenIntro = sessionStorage.getItem('jp_intro_seen');
     if (hasSeenIntro) {
       setShowIntro(false);
+      setPreInteraction(false);
     }
   }, []);
 
   function handleSkipIntro() {
     setShowIntro(false);
+    setPreInteraction(false);
     sessionStorage.setItem('jp_intro_seen', 'true');
+  }
+
+  function handleStartIntro() {
+    setPreInteraction(false);
+    // Intentar reproducir con sonido tras la interacción
+    if (videoRef.current) {
+      videoRef.current.muted = false;
+      videoRef.current.play().catch(() => {
+        // Fallback si falla
+        console.warn("Autoplay con sonido bloqueado incluso tras clic");
+      });
+    }
   }
 
   function handleNewGame() {
@@ -65,10 +80,38 @@ export default function HomePage() {
         justifyContent: 'center',
         overflow: 'hidden'
       }}>
+        {/* Pantalla Pre-Interacción (necesaria para el sonido) */}
+        {preInteraction ? (
+          <div 
+            onClick={handleStartIntro}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 20,
+              background: 'radial-gradient(circle at center, #1a1a2e 0%, #000 100%)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              gap: 'var(--sp-xl)'
+            }}
+          >
+            <div style={{ animation: 'pulseGlow 2s infinite' }}>
+              <Image src="/img/Juicio-logo.png" alt="Juicio Público" width={180} height={180} />
+            </div>
+            <button className="btn btn-primary" style={{ padding: '16px 40px', fontSize: 'var(--text-lg)' }}>
+              ▶ COMENZAR EXPERIENCIA
+            </button>
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 'var(--text-xs)', letterSpacing: '0.1em' }}>
+              CLICK PARA ACTIVAR SONIDO
+            </p>
+          </div>
+        ) : null}
+
         <video
           ref={videoRef}
           autoPlay
-          muted
           playsInline
           preload="auto"
           onEnded={handleSkipIntro}
@@ -104,19 +147,6 @@ export default function HomePage() {
         >
           SALTAR INTRO ➔
         </button>
-
-        {/* Tip: Si el video no arranca solo (Chrome/Safari suelen bloquearlo) */}
-        <div style={{
-          position: 'absolute',
-          top: 'var(--sp-xl)',
-          width: '100%',
-          textAlign: 'center',
-          color: 'rgba(255,255,255,0.4)',
-          fontSize: 'var(--text-xs)',
-          pointerEvents: 'none'
-        }}>
-          Reproduciendo intro...
-        </div>
       </div>
     );
   }
