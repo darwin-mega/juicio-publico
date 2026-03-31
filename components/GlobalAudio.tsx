@@ -19,34 +19,44 @@ import {
 } from '@/lib/sounds';
 import type { AmbienceKey } from '@/lib/audio/types';
 
-function resolveDesiredAmbience(pathname: string, multiHasGame: boolean): AmbienceKey | null {
-  if (pathname === '/') {
+function resolveDesiredAmbience(
+  pathname: string | null,
+  hasActivePhase: boolean,
+  publicMultiAudioEnabled: boolean
+): AmbienceKey | null {
+  const currentPath = pathname ?? '';
+
+  if (currentPath === '/') {
     return null;
   }
 
-  if (pathname.startsWith('/multi/game/')) {
-    return multiHasGame ? 'ambience.match' : 'ambience.lobby';
+  if (currentPath.startsWith('/multi/game/')) {
+    if (!publicMultiAudioEnabled) {
+      return null;
+    }
+
+    return hasActivePhase ? 'ambience.match' : null;
   }
 
   if (
-    pathname === '/setup' ||
-    pathname === '/room' ||
-    pathname.startsWith('/multi/create') ||
-    pathname.startsWith('/multi/host/') ||
-    pathname.startsWith('/join/')
+    currentPath === '/setup' ||
+    currentPath === '/room' ||
+    currentPath.startsWith('/multi/create') ||
+    currentPath.startsWith('/multi/host/') ||
+    currentPath.startsWith('/join/')
   ) {
     return 'ambience.lobby';
   }
 
   if (
-    pathname === '/reveal' ||
-    pathname === '/operative' ||
-    pathname === '/news' ||
-    pathname === '/trial' ||
-    pathname === '/vote' ||
-    pathname === '/resolution'
+    currentPath === '/reveal' ||
+    currentPath === '/operative' ||
+    currentPath === '/news' ||
+    currentPath === '/trial' ||
+    currentPath === '/vote' ||
+    currentPath === '/resolution'
   ) {
-    return 'ambience.match';
+    return hasActivePhase ? 'ambience.match' : null;
   }
 
   return null;
@@ -89,17 +99,20 @@ function Slider({
 export default function GlobalAudio() {
   const pathname = usePathname();
   const { state: gameState } = useGame();
-  const { room } = useMultiRoom();
+  const { room, isHost } = useMultiRoom();
   const audio = useAudioState();
   const [panelOpen, setPanelOpen] = useState(false);
   const previousPathRef = useRef<string | null>(null);
-  const hasActivePhase = pathname.startsWith('/multi/game/')
+  const currentPath = pathname ?? '';
+  const isMultiGameRoute = currentPath.startsWith('/multi/game/');
+  const publicMultiAudioEnabled = !isMultiGameRoute || isHost;
+  const hasActivePhase = isMultiGameRoute
     ? Boolean(room?.game)
-    : gameState.phase !== 'lobby';
+    : gameState.phase !== 'lobby' && gameState.players.length > 0;
 
   const desiredAmbience = useMemo(
-    () => resolveDesiredAmbience(pathname, hasActivePhase),
-    [pathname, hasActivePhase]
+    () => resolveDesiredAmbience(currentPath, hasActivePhase, publicMultiAudioEnabled),
+    [currentPath, hasActivePhase, publicMultiAudioEnabled]
   );
 
   useEffect(() => {
@@ -115,12 +128,12 @@ export default function GlobalAudio() {
 
   useEffect(() => {
     const previousPath = previousPathRef.current;
-    previousPathRef.current = pathname;
+    previousPathRef.current = currentPath;
 
-    if (previousPath && previousPath !== pathname) {
+    if (previousPath && previousPath !== currentPath) {
       void playSound('ui.screenChange');
     }
-  }, [pathname]);
+  }, [currentPath]);
 
   useEffect(() => {
     restoreMusic(600);

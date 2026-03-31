@@ -455,13 +455,19 @@ function NewsView({
     }
 
     // Jingle inmediato
-    playNewsJingle();
+    if (isHost) {
+      playNewsJingle();
+    }
     playedForRoundRef.current = currentRound;
 
     // Secuencia igual a Modo Mesa
     const t1 = setTimeout(() => {
       setStage('main');
       setHeadlineReady(true);
+      if (!isHost) {
+        return;
+      }
+
       if      (newsEvent?.type === 'death') setTimeout(playDeath, 300);
       else if (newsEvent?.type === 'saved') setTimeout(playSaved, 300);
       else                                   setTimeout(playCalm,  300);
@@ -476,19 +482,21 @@ function NewsView({
       clearTimeout(t2);
       restoreMusic(700);
     };
-  }, [currentRound, newsEvent, hasCop]);
+  }, [currentRound, newsEvent, hasCop, isHost]);
 
   // Revelar resultado policial con sonido
   useEffect(() => {
     if (stage !== 'cop' || copRevealed) return;
     const t = setTimeout(() => {
       setCopRevealed(true);
-      if (newsEvent?.cop?.isKiller) playAccusation();
-      else                          playInnocent();
+      if (isHost) {
+        if (newsEvent?.cop?.isKiller) playAccusation();
+        else                          playInnocent();
+      }
       setTimeout(() => setStage('done'), 3200);
     }, 800);
     return () => clearTimeout(t);
-  }, [stage, copRevealed, newsEvent?.cop?.isKiller]);
+  }, [stage, copRevealed, newsEvent?.cop?.isKiller, isHost]);
 
   const eventColor = newsEvent ? NEWS_COLORS[newsEvent.type] : 'var(--accent)';
   const eventIcon  = newsEvent ? NEWS_ICONS[newsEvent.type]  : '📡';
@@ -630,9 +638,13 @@ function TrialView({
   const startedAt = room.game?.trialStartedAt ?? Date.now();
 
   useEffect(() => {
-    // Al entrar al juicio, aseguramos que la música de fondo esté sonando
+    if (!isHost) {
+      return;
+    }
+
+    // Al entrar al juicio, el host mantiene la base pública de tensión.
     startBackgroundMusic();
-  }, []);
+  }, [isHost]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -754,12 +766,14 @@ function VoteView({
   me,
   room,
   deviceId,
+  isHost,
   hasVoted,
   onVote,
 }: {
   me: MultiPlayer;
   room: MultiRoomState;
   deviceId: string;
+  isHost: boolean;
   hasVoted: boolean;
   onVote: (targetId: string) => void;
 }) {
@@ -771,8 +785,12 @@ function VoteView({
   const totalVoters = room.players.filter((p) => p.isAlive).length;
 
   useEffect(() => {
+    if (!isHost) {
+      return;
+    }
+
     void playSound('game.voteStart');
-  }, []);
+  }, [isHost]);
 
   async function handleVote() {
     if (!selected) return;
@@ -892,7 +910,11 @@ function ResolutionView({
   const winner = room.game?.winnerFaction;
 
   useEffect(() => {
-    // 1. Al entrar a la resolución, aseguramos que regrese la música global si no estaba
+    if (!isHost) {
+      return;
+    }
+
+    // 1. Al entrar a la resolución, el host retoma la mezcla pública.
     startBackgroundMusic();
     duckMusic(0.05, 220);
 
@@ -916,7 +938,7 @@ function ResolutionView({
       clearTimeout(voteEndTimer);
       restoreMusic(900);
     };
-  }, [isOver, winner, lastReport?.expelled]);
+  }, [isHost, isOver, winner, lastReport?.expelled]);
 
   if (isOver) {
     return (
@@ -1171,6 +1193,7 @@ export default function MultiGamePage() {
         me={me}
         room={room}
         deviceId={deviceId}
+        isHost={isHost}
         hasVoted={hasVoted}
         onVote={handleVote}
       />
