@@ -12,10 +12,12 @@ import {
   stopAmbience,
   unlockAudio,
 } from '@/lib/sounds';
+import { useAudioState } from '@/lib/audio/hooks';
 
 export default function HomePage() {
   const router = useRouter();
   const { dispatch, clearSave, hasSave, state } = useGame();
+  const audio = useAudioState();
   
   // Estado para controlar el video de apertura
   const [showIntro, setShowIntro] = useState(true);
@@ -49,9 +51,10 @@ export default function HomePage() {
   async function handleStartIntro() {
     await unlockAudio();
     void playSound('ui.confirm', { bypassCooldown: true });
-    setPreInteraction(false);
     // Intentar reproducir el trailer respetando el mute global
     if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
       videoRef.current.muted = getAudioState().muted;
       videoRef.current.play().catch(() => {
         // Fallback si falla el trailer: al menos dejamos música de fondo
@@ -59,6 +62,7 @@ export default function HomePage() {
         void startLobbyAmbience();
       });
     }
+    setPreInteraction(false);
   }
 
   function handleNewGame() {
@@ -133,9 +137,9 @@ export default function HomePage() {
 
         <video
           ref={videoRef}
-          autoPlay
           playsInline
           preload="auto"
+          muted={preInteraction || audio.muted}
           onEnded={handleSkipIntro}
           style={{
             width: '100%',

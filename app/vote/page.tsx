@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import MobileAtmosphereArt from '@/components/MobileAtmosphereArt';
 import { useGame } from '@/context/GameContext';
 import { useLocalPlayer } from '@/lib/hooks/useLocalPlayer';
 import { playHandoff, playSelect, playTransition, playSound } from '@/lib/sounds';
@@ -108,8 +109,21 @@ export default function VotePage() {
 
   if (!isIndividual && step === 'handoff') {
     return (
-      <main className="page-shell" style={{ justifyContent: 'center', textAlign: 'center' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-lg)', alignItems: 'center' }}>
+      <main
+        className="page-shell"
+        style={{ position: 'relative', overflow: 'hidden', justifyContent: 'center', textAlign: 'center' }}
+      >
+        <MobileAtmosphereArt variant="handoff" />
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--sp-lg)',
+            alignItems: 'center',
+          }}
+        >
           <div className="phase-badge">Votación Secreta</div>
           <div style={{ width: 80, height: 80, borderRadius: 'var(--radius-lg)', background: 'var(--bg-surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>🗳️</div>
           <h2>Pasá el dispositivo</h2>

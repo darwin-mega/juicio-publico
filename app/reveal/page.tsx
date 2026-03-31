@@ -13,6 +13,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import MobileAtmosphereArt from '@/components/MobileAtmosphereArt';
 import { useGame } from '@/context/GameContext';
 import { ROLE_LABELS } from '@/lib/game/state';
 import { useLocalPlayer } from '@/lib/hooks/useLocalPlayer';
@@ -100,70 +101,76 @@ export default function RevealPage() {
   // ── Pantalla de traspaso (neutra) ──────────────────────────
   if (!isIndividual && step === 'handoff') {
     return (
-      <main className="page-shell" style={{ justifyContent: 'center', textAlign: 'center' }}>
-        {/* Indicador de progreso */}
-        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 'var(--sp-xl)' }}>
-          {passOrder.map((_, i) => (
+      <main
+        className="page-shell"
+        style={{ position: 'relative', overflow: 'hidden', justifyContent: 'center', textAlign: 'center' }}
+      >
+        <MobileAtmosphereArt variant="handoff" />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {/* Indicador de progreso */}
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 'var(--sp-xl)' }}>
+            {passOrder.map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background:
+                    i < playerIndex
+                      ? 'var(--success)'
+                      : i === playerIndex
+                      ? 'var(--accent)'
+                      : 'var(--border)',
+                  transition: 'background 0.2s',
+                }}
+              />
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-lg)', alignItems: 'center' }}>
             <div
-              key={i}
               style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background:
-                  i < playerIndex
-                    ? 'var(--success)'
-                    : i === playerIndex
-                    ? 'var(--accent)'
-                    : 'var(--border)',
-                transition: 'background 0.2s',
+                width: 80,
+                height: 80,
+                borderRadius: 'var(--radius-lg)',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 40,
               }}
-            />
-          ))}
-        </div>
+            >
+              📱
+            </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-lg)', alignItems: 'center' }}>
-          <div
-            style={{
-              width: 80,
-              height: 80,
-              borderRadius: 'var(--radius-lg)',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 40,
-            }}
-          >
-            📱
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' }}>
+              <h2>Pasá el dispositivo</h2>
+              <p>
+                Es el turno de{' '}
+                <strong style={{ color: 'var(--text-primary)' }}>{currentPlayer.name}</strong>
+              </p>
+              <p className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>
+                No muestres la pantalla mientras lo pasás.
+              </p>
+            </div>
+
+            <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>
+              Jugador {playerIndex + 1} de {passOrder.length}
+            </span>
+
+            <button
+              className="btn btn-primary"
+              style={{ minWidth: 240 }}
+              onClick={() => {
+                void playSound('ui.confirm');
+                setStep('reveal');
+              }}
+            >
+              Soy {currentPlayer.name} — Mostrar mi rol
+            </button>
           </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' }}>
-            <h2>Pasá el dispositivo</h2>
-            <p>
-              Es el turno de{' '}
-              <strong style={{ color: 'var(--text-primary)' }}>{currentPlayer.name}</strong>
-            </p>
-            <p className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>
-              No muestres la pantalla mientras lo pasás.
-            </p>
-          </div>
-
-          <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>
-            Jugador {playerIndex + 1} de {passOrder.length}
-          </span>
-
-          <button
-            className="btn btn-primary"
-            style={{ minWidth: 240 }}
-            onClick={() => {
-              void playSound('ui.confirm');
-              setStep('reveal');
-            }}
-          >
-            Soy {currentPlayer.name} — Mostrar mi rol
-          </button>
         </div>
       </main>
     );

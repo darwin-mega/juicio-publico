@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import MobileAtmosphereArt from '@/components/MobileAtmosphereArt';
 import { useGame } from '@/context/GameContext';
 import { ROLE_LABELS } from '@/lib/game/state';
 import { useLocalPlayer } from '@/lib/hooks/useLocalPlayer';
@@ -38,44 +38,7 @@ export default function RoomPage() {
 
   return (
     <main className="page-shell" style={{ position: 'relative', overflow: 'hidden' }}>
-      <div
-        aria-hidden
-        className="room-mobile-art"
-        style={{
-          position: 'fixed',
-          left: 0,
-          right: 0,
-          bottom: 'calc(72px + env(safe-area-inset-bottom))',
-          zIndex: 0,
-          pointerEvents: 'none',
-          display: 'flex',
-          justifyContent: 'center',
-          opacity: 0.2,
-        }}
-      >
-        <div
-          style={{
-            position: 'relative',
-            width: 'min(100vw, 480px)',
-            height: '42dvh',
-            minHeight: 280,
-            filter: 'saturate(0.82) contrast(1.04)',
-            maskImage: 'linear-gradient(to top, transparent 0%, black 22%, black 72%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to top, transparent 0%, black 22%, black 72%, transparent 100%)',
-          }}
-        >
-          <Image
-            src="/img/Fondo-juicio.png"
-            alt=""
-            fill
-            sizes="100vw"
-            style={{
-              objectFit: 'cover',
-              objectPosition: 'center bottom',
-            }}
-          />
-        </div>
-      </div>
+      <MobileAtmosphereArt variant="room" />
 
       <div className="page-header" style={{ position: 'relative', zIndex: 1 }}>
         <button className="btn btn-ghost btn-sm" style={{ width: 'auto' }} onClick={() => router.push('/setup')}>
@@ -163,13 +126,6 @@ export default function RoomPage() {
           Iniciar Partida ✓
         </button>
       </div>
-      <style>{`
-        @media (min-width: 768px) {
-          .room-mobile-art {
-            display: none !important;
-          }
-        }
-      `}</style>
     </main>
   );
 }

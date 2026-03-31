@@ -17,14 +17,41 @@ import { duckMusic, playSound, restoreMusic } from '@/lib/sounds';
 export default function ResolutionPage() {
   const router = useRouter();
   const { state, dispatch, clearSave } = useGame();
+  const hasPlayers = state.players.length > 0;
 
   useEffect(() => {
-    if (state.players.length === 0) {
+    if (!hasPlayers) {
       router.replace('/');
     }
-  }, [state.players.length, router]);
+  }, [hasPlayers, router]);
 
-  if (state.players.length === 0) {
+  useEffect(() => {
+    if (!hasPlayers) {
+      return;
+    }
+
+    duckMusic(0.05, 220);
+
+    const voteEndTimer = window.setTimeout(() => {
+      void playSound('game.voteEnd');
+    }, 120);
+
+    const revealTimer = window.setTimeout(() => {
+      if (state.isOver) {
+        void playSound(state.winnerFaction === 'town' ? 'game.resultTown' : 'game.resultKillers');
+      } else {
+        void playSound('game.reveal');
+      }
+    }, 360);
+
+    return () => {
+      window.clearTimeout(voteEndTimer);
+      window.clearTimeout(revealTimer);
+      restoreMusic(900);
+    };
+  }, [hasPlayers, state.isOver, state.winnerFaction]);
+
+  if (!hasPlayers) {
     return null;
   }
 
@@ -47,30 +74,6 @@ export default function ResolutionPage() {
     clearSave(); // Limpia localStorage y resetea estado
     router.push('/');
   }
-
-  // Sonido al montar
-  useEffect(() => {
-    duckMusic(0.05, 220);
-
-    const voteEndTimer = window.setTimeout(() => {
-      void playSound('game.voteEnd');
-    }, 120);
-
-    const revealTimer = window.setTimeout(() => {
-      if (state.isOver) {
-        void playSound(state.winnerFaction === 'town' ? 'game.resultTown' : 'game.resultKillers');
-      } else {
-        void playSound('game.reveal');
-      }
-    }, 360);
-
-    return () => {
-      window.clearTimeout(voteEndTimer);
-      window.clearTimeout(revealTimer);
-      restoreMusic(900);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // ── Pantalla de FIN DE PARTIDA ───────────────────────────
   if (state.isOver) {

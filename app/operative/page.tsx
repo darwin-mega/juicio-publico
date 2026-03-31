@@ -12,8 +12,9 @@
 //   No hay timer de espera. La selección del pueblo no afecta el juego.
 // ============================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import MobileAtmosphereArt from '@/components/MobileAtmosphereArt';
 import { useGame } from '@/context/GameContext';
 import { Player } from '@/lib/game/state';
 import { getOperativeAction, ROLE_COLORS } from '@/lib/modes/table';
@@ -44,8 +45,13 @@ export default function OperativePage() {
   const [collectedInspectTarget, setCollectedInspectTarget]= useState<string | null>(null);
   const [selected,               setSelected]              = useState<string[]>([]);
 
+  useEffect(() => {
+    if (state.players.length === 0 || state.phase === 'lobby') {
+      router.replace('/');
+    }
+  }, [state.players.length, state.phase, router]);
+
   if (state.players.length === 0 || state.phase === 'lobby') {
-    router.replace('/');
     return null;
   }
 
@@ -97,8 +103,22 @@ export default function OperativePage() {
   // ── 1. Pantalla de handoff ───────────────────────────────
   if (showHandoff) {
     return (
-      <main className="page-shell" style={{ justifyContent: 'center', textAlign: 'center' }}>
-        <div className="anim-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-lg)', alignItems: 'center' }}>
+      <main
+        className="page-shell"
+        style={{ position: 'relative', overflow: 'hidden', justifyContent: 'center', textAlign: 'center' }}
+      >
+        <MobileAtmosphereArt variant="handoff" />
+        <div
+          className="anim-fade-in"
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--sp-lg)',
+            alignItems: 'center',
+          }}
+        >
           <div className="phase-badge">🌙 Clandestinidad</div>
           <div style={{
             width: 88, height: 88, borderRadius: '50%',
