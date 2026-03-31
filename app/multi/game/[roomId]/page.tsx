@@ -11,7 +11,7 @@
 // y las funciones de acción como props.
 // ============================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useMultiRoom } from '@/context/MultiRoomContext';
 import {
@@ -124,6 +124,11 @@ function RevealView({
   onReady: () => void;
   isReady: boolean;
 }) {
+  useEffect(() => {
+    if (!secret) return;
+    void playRoleSound(secret.role);
+  }, [secret?.deviceId, secret?.role]);
+
   if (!secret) {
     return (
       <main className="page-shell" style={{ justifyContent: 'center', alignItems: 'center' }}>
@@ -220,7 +225,10 @@ function RevealView({
         <button
           id="btn-reveal-listo"
           className="btn btn-primary"
-          onClick={onReady}
+          onClick={() => {
+            void playSound('ui.confirm');
+            onReady();
+          }}
           disabled={isReady}
           style={{ fontSize: 'var(--text-md)', padding: '16px' }}
         >
@@ -297,11 +305,13 @@ function OperativeView({
 
   async function handleConfirm() {
     if (isTown) {
+      void playSound('ui.confirm');
       setConfirming(true);
       onAction('neutral', null);
       return;
     }
     if (!selected) return;
+    void playSound('ui.confirm');
     setConfirming(true);
     onAction(config.actionType, selected);
   }
@@ -352,6 +362,7 @@ function OperativeView({
               key={p.deviceId}
               onClick={() => {
                 if (isTown) return;
+                void playSound('ui.select');
                 setSelected(sel => sel === p.deviceId ? null : p.deviceId);
               }}
               style={{
@@ -405,8 +416,9 @@ function OperativeView({
 import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
 import {
   playNewsJingle, playDeath, playSaved, playCalm,
-  playAccusation, playInnocent, playClick, playTransition,
-  startBackgroundMusic, playVictory, playDefeat, playExpelled
+  playAccusation, playInnocent, playTransition,
+  startBackgroundMusic, playVictory, playDefeat, playExpelled,
+  duckMusic, playRoleSound, playSound, restoreMusic,
 } from '@/lib/sounds';
 
 type NewsStage = 'jingle' | 'main' | 'cop' | 'done';
@@ -425,7 +437,7 @@ function NewsView({
   const [stage, setStage] = useState<NewsStage>('jingle');
   const [copRevealed, setCopRevealed] = useState(false);
   const [headlineReady, setHeadlineReady] = useState(false);
-  const [playedForRound, setPlayedForRound] = useState<number | null>(null);
+  const playedForRoundRef = useRef<number | null>(null);
 
   const lastReport = room.game?.reports[room.game.reports.length - 1];
   const newsEvent = lastReport ? deriveNewsEvent(lastReport) : null;
@@ -435,7 +447,7 @@ function NewsView({
   // ── Secuencia de revelación ───────────────────────────────
   useEffect(() => {
     // Si ya procesamos esta ronda, saltamos al final para no repetir cinemática al recargar
-    if (playedForRound === currentRound) {
+    if (playedForRoundRef.current === currentRound) {
       setStage('done');
       setCopRevealed(true);
       setHeadlineReady(true);
@@ -444,7 +456,7 @@ function NewsView({
 
     // Jingle inmediato
     playNewsJingle();
-    setPlayedForRound(currentRound);
+    playedForRoundRef.current = currentRound;
 
     // Secuencia igual a Modo Mesa
     const t1 = setTimeout(() => {
@@ -459,8 +471,12 @@ function NewsView({
       ? setTimeout(() => setStage('cop'), 6800)
       : setTimeout(() => setStage('done'), 6500);
 
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [currentRound, playedForRound, newsEvent, hasCop]);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      restoreMusic(700);
+    };
+  }, [currentRound, newsEvent, hasCop]);
 
   // Revelar resultado policial con sonido
   useEffect(() => {
@@ -583,7 +599,7 @@ function NewsView({
       {stage === 'done' && (
         <div className="page-footer anim-slide-up">
           {isHost ? (
-            <button className="btn btn-primary" onClick={() => { playTransition(); onAdvance(); }} disabled={advancing}>
+            <button className="btn btn-primary" onClick={() => { playTransition(); restoreMusic(900); onAdvance(); }} disabled={advancing}>
               {advancing ? 'Avanzando...' : '⚖️ Ir al Juicio Público →'}
             </button>
           ) : (
@@ -712,7 +728,10 @@ function TrialView({
           <button
             id="btn-ir-a-votacion"
             className="btn btn-primary"
-            onClick={onAdvance}
+            onClick={() => {
+              void playSound('ui.confirm');
+              onAdvance();
+            }}
             disabled={advancing}
             style={{ fontSize: 'var(--text-md)', padding: '16px' }}
           >
@@ -751,8 +770,13 @@ function VoteView({
   const votedCount = Object.keys(room.game?.votes ?? {}).length;
   const totalVoters = room.players.filter((p) => p.isAlive).length;
 
+  useEffect(() => {
+    void playSound('game.voteStart');
+  }, []);
+
   async function handleVote() {
     if (!selected) return;
+    void playSound('game.voteCast');
     setSubmitting(true);
     onVote(selected);
   }
@@ -804,7 +828,10 @@ function VoteView({
           {alivePlayers.map((p, i) => (
             <button
               key={p.deviceId}
-              onClick={() => setSelected(sel => sel === p.deviceId ? null : p.deviceId)}
+              onClick={() => {
+                void playSound('ui.select');
+                setSelected(sel => sel === p.deviceId ? null : p.deviceId);
+              }}
               style={{
                 background: 'none', border: 'none', padding: 0,
                 textAlign: 'left', cursor: 'pointer',
@@ -867,19 +894,28 @@ function ResolutionView({
   useEffect(() => {
     // 1. Al entrar a la resolución, aseguramos que regrese la música global si no estaba
     startBackgroundMusic();
+    duckMusic(0.05, 220);
 
     // 2. Disparar sonidos de veredicto
+    const voteEndTimer = window.setTimeout(() => {
+      void playSound('game.voteEnd');
+    }, 120);
+
     const t = setTimeout(() => {
       // Nota: Si es multijugador presencial, el host es el que suele tener el sonido alto
       if (isOver) {
         if (winner === 'town') playVictory();
         else playDefeat();
-      } else if (lastReport?.expelled) {
+      } else {
         playExpelled();
       }
     }, 400);
 
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(voteEndTimer);
+      restoreMusic(900);
+    };
   }, [isOver, winner, lastReport?.expelled]);
 
   if (isOver) {
@@ -966,7 +1002,10 @@ function ResolutionView({
           <button
             id="btn-siguiente-ronda"
             className="btn btn-primary"
-            onClick={onAdvance}
+            onClick={() => {
+              void playSound('game.phaseTransition');
+              onAdvance();
+            }}
             disabled={advancing}
             style={{ fontSize: 'var(--text-md)', padding: '16px' }}
           >

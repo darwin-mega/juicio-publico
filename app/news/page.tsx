@@ -7,8 +7,7 @@ import { ROLE_LABELS } from '@/lib/game/state';
 import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
 import {
   playNewsJingle, playDeath, playSaved, playCalm,
-  playAccusation, playInnocent, playClick, playTransition,
-  startBackgroundMusic,
+  playAccusation, playInnocent, playTransition, restoreMusic,
 } from '@/lib/sounds';
 
 type Stage = 'jingle' | 'main' | 'cop' | 'done';
@@ -55,7 +54,11 @@ export default function NewsPage() {
       ? setTimeout(() => setStage('cop'), 6800)
       : setTimeout(() => setStage('done'), 6500);
 
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      restoreMusic(700);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -74,12 +77,12 @@ export default function NewsPage() {
   function goToTrial() { 
     playTransition(); 
     dispatch({ type: 'NEXT_PHASE' }); 
-    startBackgroundMusic(); // Volver a la música global tras las noticias
+    restoreMusic(900);
     router.push('/trial'); 
   }
   function goToResolution() { 
     playTransition(); 
-    startBackgroundMusic(); // Volver a la música global tras las noticias
+    restoreMusic(900);
     router.push('/resolution'); 
   }
 

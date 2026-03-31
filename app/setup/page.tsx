@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
 import { GameMode } from '@/lib/game/state';
 import { getRecommendedBalance } from '@/lib/game/rules';
+import { playSound } from '@/lib/sounds';
 
 export default function SetupPage() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function SetupPage() {
   const recommended = getRecommendedBalance(playerCount);
 
   function handlePlayerCountChange(n: number) {
+    void playSound('ui.select', { bypassCooldown: true, volume: 0.6 });
     setPlayerCount(n);
     setNames((prev) => Array(n).fill('').map((_, i) => prev[i] ?? ''));
     // Ajustar roles al nuevo conteo usando el balance recomendado
@@ -33,11 +35,13 @@ export default function SetupPage() {
   }
 
   function applyRecommended() {
+    void playSound('ui.confirm');
     setKillerCount(recommended.killers);
     setCopCount(recommended.cops);
   }
 
   function handleConfirm() {
+    void playSound('ui.confirm');
     const filledNames = names.map((n, i) => n.trim() || `Jugador ${i + 1}`);
     dispatch({
       type: 'CONFIGURE_GAME',
@@ -71,14 +75,20 @@ export default function SetupPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-sm)' }}>
             <div
               className={`mode-option ${mode === 'table' ? 'active' : ''}`}
-              onClick={() => setMode('table')}
+              onClick={() => {
+                void playSound('ui.select');
+                setMode('table');
+              }}
             >
               <span className="mode-option-title">📱 Mesa</span>
               <span className="mode-option-desc">Un dispositivo circula entre jugadores</span>
             </div>
             <div
               className={`mode-option ${mode === 'individual' ? 'active' : ''}`}
-              onClick={() => setMode('individual')}
+              onClick={() => {
+                void playSound('ui.select');
+                setMode('individual');
+              }}
             >
               <span className="mode-option-title">👥 Individual</span>
               <span className="mode-option-desc">Cada jugador usa su propio celular</span>

@@ -5,10 +5,11 @@
 // Votación secreta — Soporta Modo Mesa e Individual
 // ============================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
 import { useLocalPlayer } from '@/lib/hooks/useLocalPlayer';
+import { playHandoff, playSelect, playTransition, playSound } from '@/lib/sounds';
 
 type VoteStep = 'handoff' | 'voting' | 'waiting';
 
@@ -30,8 +31,17 @@ export default function VotePage() {
   // Votos acumulados (solo relevante en modo mesa o si simulamos todo en un dispositivo)
   const [collectedVotes, setCollectedVotes] = useState<Record<string, string>>({});
 
+  useEffect(() => {
+    if (state.players.length === 0) {
+      router.replace('/');
+    }
+  }, [state.players.length, router]);
+
+  useEffect(() => {
+    void playSound('game.voteStart');
+  }, []);
+
   if (state.players.length === 0) {
-    router.replace('/');
     return null;
   }
 
@@ -58,6 +68,7 @@ export default function VotePage() {
       setStep('waiting');
       // Simulamos que al cabo de un tiempo todos votaron y vamos a resolución
       setTimeout(() => {
+        playTransition();
         dispatch({ type: 'NEXT_PHASE' });
         router.push('/resolution');
       }, 3000);
@@ -69,6 +80,7 @@ export default function VotePage() {
         Object.entries(newVotes).forEach(([vid, tid]) => {
           dispatch({ type: 'CAST_VOTE', voterId: vid, targetId: tid });
         });
+        playTransition();
         dispatch({ type: 'NEXT_PHASE' });
         router.push('/resolution');
       } else {
@@ -103,7 +115,16 @@ export default function VotePage() {
           <h2>Pasá el dispositivo</h2>
           <p>Es el turno de <strong style={{ color: 'var(--accent)' }}>{currentVoter.name}</strong></p>
           <p className="text-muted" style={{ fontSize: 'var(--text-xs)' }}>{voterIdx + 1} de {voterOrderIds.length} jugadores</p>
-          <button className="btn btn-primary" style={{ minWidth: 200 }} onClick={() => setStep('voting')}>Soy {currentVoter.name} — Votar</button>
+          <button
+            className="btn btn-primary"
+            style={{ minWidth: 200 }}
+            onClick={() => {
+              playHandoff();
+              setStep('voting');
+            }}
+          >
+            Soy {currentVoter.name} — Votar
+          </button>
         </div>
       </main>
     );
@@ -136,7 +157,15 @@ export default function VotePage() {
           {votableTargets.map((player) => {
             const isChosen = selected === player.id;
             return (
-              <button key={player.id} className={`player-card ${isChosen ? 'selected danger-selected' : ''}`} onClick={() => setSelected(player.id)} style={{ textAlign: 'left' }}>
+              <button
+                key={player.id}
+                className={`player-card ${isChosen ? 'selected danger-selected' : ''}`}
+                onClick={() => {
+                  playSelect();
+                  setSelected(player.id);
+                }}
+                style={{ textAlign: 'left' }}
+              >
                 <div className="player-avatar" style={{ borderColor: isChosen ? 'var(--danger)' : undefined }}>{player.name[0]?.toUpperCase()}</div>
                 <span className="player-name">{player.name}</span>
                 {isChosen && <span style={{ color: 'var(--danger)', marginLeft: 'auto' }}>✓</span>}
@@ -147,7 +176,15 @@ export default function VotePage() {
       </div>
 
       <div className="page-footer">
-        <button className="btn btn-danger" disabled={!selected} onClick={() => selected && advance(selected)}>
+        <button
+          className="btn btn-danger"
+          disabled={!selected}
+          onClick={() => {
+            if (!selected) return;
+            void playSound('game.voteCast');
+            advance(selected);
+          }}
+        >
           {isLastVoter || isIndividual ? 'Confirmar voto →' : 'Votar y continuar →'}
         </button>
       </div>

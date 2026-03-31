@@ -12,14 +12,19 @@ import { useGame } from '@/context/GameContext';
 import { ROLE_LABELS } from '@/lib/game/state';
 import { ROLE_COLORS, ROLE_EMOJIS } from '@/lib/modes/table';
 import { useEffect } from 'react';
-import { playVictory, playDefeat, playExpelled, playClick } from '@/lib/sounds';
+import { duckMusic, playSound, restoreMusic } from '@/lib/sounds';
 
 export default function ResolutionPage() {
   const router = useRouter();
   const { state, dispatch, clearSave } = useGame();
 
+  useEffect(() => {
+    if (state.players.length === 0) {
+      router.replace('/');
+    }
+  }, [state.players.length, router]);
+
   if (state.players.length === 0) {
-    router.replace('/');
     return null;
   }
 
@@ -32,28 +37,38 @@ export default function ResolutionPage() {
   const aliveKillers = alivePlayers.filter((p) => p.role === 'killer').length;
 
   function handleNewRound() {
-    playClick();
+    void playSound('game.phaseTransition');
     dispatch({ type: 'NEXT_PHASE' }); // resolution → operative + incrementa ronda
     router.push('/operative');
   }
 
   function handleRestart() {
-    playClick();
+    void playSound('ui.confirm');
     clearSave(); // Limpia localStorage y resetea estado
     router.push('/');
   }
 
   // Sonido al montar
   useEffect(() => {
-    const t = setTimeout(() => {
+    duckMusic(0.05, 220);
+
+    const voteEndTimer = window.setTimeout(() => {
+      void playSound('game.voteEnd');
+    }, 120);
+
+    const revealTimer = window.setTimeout(() => {
       if (state.isOver) {
-        if (state.winnerFaction === 'town') playVictory();
-        else playDefeat();
+        void playSound(state.winnerFaction === 'town' ? 'game.resultTown' : 'game.resultKillers');
       } else {
-        playExpelled();
+        void playSound('game.reveal');
       }
-    }, 400);
-    return () => clearTimeout(t);
+    }, 360);
+
+    return () => {
+      window.clearTimeout(voteEndTimer);
+      window.clearTimeout(revealTimer);
+      restoreMusic(900);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -23,6 +23,7 @@ import {
   getTeammates,
   getTeammateLabel,
 } from '@/lib/modes/table';
+import { playRoleSound, playSound } from '@/lib/sounds';
 
 type RevealStep = 'handoff' | 'reveal';
 
@@ -54,15 +55,13 @@ export default function RevealPage() {
   }, [noGame, needsIdentity, router]);
   // ─────────────────────────────────────────────────────────
 
-  // Pantalla de espera mientras se procesa el redirect
-  if (noGame || needsIdentity) {
-    return null;
-  }
-
-  // Usar fixedPassOrder para el modo mesa; en individual, el orden de players
-  const passOrder = isIndividual
+  const passOrder = noGame
+    ? []
+    : isIndividual
     ? state.players
-    : state.fixedPassOrder.map((id) => state.players.find((p) => p.id === id)!);
+    : state.fixedPassOrder
+        .map((id) => state.players.find((p) => p.id === id))
+        .filter((player): player is (typeof state.players)[number] => Boolean(player));
 
   // Índice efectivo
   const effectiveIndex = isIndividual
@@ -72,7 +71,15 @@ export default function RevealPage() {
   const currentPlayer = passOrder[effectiveIndex >= 0 ? effectiveIndex : 0];
   const isLastPlayer = isIndividual ? true : playerIndex === passOrder.length - 1;
 
-  if (!currentPlayer) return null;
+  useEffect(() => {
+    if (!currentPlayer || step !== 'reveal') return;
+    void playRoleSound(currentPlayer.role);
+  }, [currentPlayer?.id, currentPlayer?.role, step]);
+
+  // Pantalla de espera mientras se procesa el redirect
+  if (noGame || needsIdentity || !currentPlayer) {
+    return null;
+  }
 
   const teammates = getTeammates(currentPlayer, passOrder);
   const teammateLabel = getTeammateLabel(currentPlayer.role);
@@ -81,6 +88,7 @@ export default function RevealPage() {
   const roleDesc = ROLE_DESCRIPTIONS[currentPlayer.role];
 
   function handleReady() {
+    void playSound(isLastPlayer ? 'game.phaseTransition' : 'ui.confirm');
     if (isLastPlayer) {
       router.push('/operative');
     } else {
@@ -149,7 +157,10 @@ export default function RevealPage() {
           <button
             className="btn btn-primary"
             style={{ minWidth: 240 }}
-            onClick={() => setStep('reveal')}
+            onClick={() => {
+              void playSound('ui.confirm');
+              setStep('reveal');
+            }}
           >
             Soy {currentPlayer.name} — Mostrar mi rol
           </button>

@@ -13,6 +13,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useMultiRoom } from '@/context/MultiRoomContext';
 import { startGame } from '@/lib/multi/api';
 import QRCode from '@/components/QRCode';
+import { playSound, startMatchAmbience } from '@/lib/sounds';
 
 
 
@@ -46,10 +47,11 @@ export default function MultiHostPage() {
   async function handleCopyLink() {
     try {
       await navigator.clipboard.writeText(inviteUrl);
+      void playSound('ui.confirm');
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback
+      void playSound('game.error');
     }
   }
 
@@ -58,10 +60,13 @@ export default function MultiHostPage() {
     setStartError(null);
     const result = await startGame({ roomId, deviceId });
     if (!result.ok) {
+      void playSound('game.error');
       setStartError(result.error);
       setStarting(false);
       return;
     }
+    void playSound('game.start');
+    void startMatchAmbience({ restart: true });
     router.push(`/multi/game/${roomId}`);
   }
 

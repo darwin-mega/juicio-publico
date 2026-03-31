@@ -14,6 +14,7 @@ import { useMultiRoom } from '@/context/MultiRoomContext';
 import { createRoom } from '@/lib/multi/api';
 import { saveHostRoom, saveLastRoom } from '@/lib/multi/device';
 import { getRecommendedBalance } from '@/lib/game/rules';
+import { playSound } from '@/lib/sounds';
 
 export default function MultiCreatePage() {
   const router = useRouter();
@@ -31,6 +32,7 @@ export default function MultiCreatePage() {
   const maxKillers = Math.max(1, Math.floor(playerCount / 3));
 
   function handlePlayerCountChange(n: number) {
+    void playSound('ui.select', { bypassCooldown: true, volume: 0.6 });
     setPlayerCount(n);
     const rec = getRecommendedBalance(n);
     setKillerCount(rec.killers);
@@ -39,10 +41,12 @@ export default function MultiCreatePage() {
 
   async function handleCreate() {
     if (!hostName.trim()) {
+      void playSound('game.error');
       setError('Ingresá tu nombre antes de crear la sala.');
       return;
     }
     if (!deviceId) {
+      void playSound('game.error');
       setError('Error al identificar tu dispositivo. Recargá la página.');
       return;
     }
@@ -57,6 +61,7 @@ export default function MultiCreatePage() {
     });
 
     if (!result.ok) {
+      void playSound('game.error');
       setError(result.error);
       setCreating(false);
       return;
@@ -66,6 +71,7 @@ export default function MultiCreatePage() {
     saveHostRoom(roomId);
     saveLastRoom(roomId);
 
+    void playSound('ui.joinRoom');
     router.push(`/multi/host/${roomId}`);
   }
 
@@ -136,7 +142,11 @@ export default function MultiCreatePage() {
             <button
               className="btn btn-ghost btn-sm"
               style={{ width: 'auto', fontSize: 'var(--text-xs)', padding: '4px 10px' }}
-              onClick={() => { setKillerCount(recommended.killers); setCopCount(recommended.cops); }}
+              onClick={() => {
+                void playSound('ui.confirm');
+                setKillerCount(recommended.killers);
+                setCopCount(recommended.cops);
+              }}
             >
               Aplicar
             </button>

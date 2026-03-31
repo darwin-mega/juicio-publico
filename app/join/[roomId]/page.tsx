@@ -16,6 +16,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useMultiRoom } from '@/context/MultiRoomContext';
 import { getRoomState, joinRoom as apiJoinRoom } from '@/lib/multi/api';
 import { saveLastRoom } from '@/lib/multi/device';
+import { playSound } from '@/lib/sounds';
 
 export default function JoinPage() {
   const router = useRouter();
@@ -54,10 +55,12 @@ export default function JoinPage() {
 
   async function handleJoin() {
     if (!name.trim()) {
+      void playSound('game.error');
       setError('Ingresá tu nombre para continuar.');
       return;
     }
     if (!deviceId) {
+      void playSound('game.error');
       setError('No se pudo identificar tu dispositivo. Recargá la página.');
       return;
     }
@@ -72,12 +75,14 @@ export default function JoinPage() {
     });
 
     if (!result.ok) {
+      void playSound('game.error');
       setError(result.error);
       setJoining(false);
       return;
     }
 
     saveLastRoom(roomId);
+    void playSound('ui.joinRoom');
     router.push(`/multi/game/${roomId}`);
   }
 

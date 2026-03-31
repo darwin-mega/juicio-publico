@@ -5,7 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
 import { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
-import { startBackgroundMusic } from '@/lib/sounds';
+import {
+  getAudioState,
+  playSound,
+  startLobbyAmbience,
+  stopAmbience,
+  unlockAudio,
+} from '@/lib/sounds';
 
 export default function HomePage() {
   const router = useRouter();
@@ -22,35 +28,41 @@ export default function HomePage() {
     if (hasSeenIntro) {
       setShowIntro(false);
       setPreInteraction(false);
-      startBackgroundMusic(); // Iniciar música si ya se interactuó previamente
+      void startLobbyAmbience();
+      return;
     }
+
+    stopAmbience({ fadeOutMs: 180 });
   }, []);
 
   function handleSkipIntro() {
+    if (videoRef.current) {
+      videoRef.current.pause();
+    }
+    void playSound('ui.confirm');
     setShowIntro(false);
     setPreInteraction(false);
     sessionStorage.setItem('jp_intro_seen', 'true');
-    startBackgroundMusic();
+    void startLobbyAmbience({ restart: true });
   }
 
-  function handleStartIntro() {
+  async function handleStartIntro() {
+    await unlockAudio();
+    void playSound('ui.confirm', { bypassCooldown: true });
     setPreInteraction(false);
-    // Intentar reproducir con sonido tras la interacción
+    // Intentar reproducir el trailer respetando el mute global
     if (videoRef.current) {
-      videoRef.current.muted = false;
+      videoRef.current.muted = getAudioState().muted;
       videoRef.current.play().catch(() => {
-        // Fallback si falla
-        console.warn("Autoplay con sonido bloqueado incluso tras clic");
+        // Fallback si falla el trailer: al menos dejamos música de fondo
+        console.warn('Autoplay con sonido bloqueado incluso tras clic');
+        void startLobbyAmbience();
       });
     }
-
-    // La música de fondo empezará después del trailer (o junto a él si se prefiere)
-    // Pero como el trailer ya tiene sonido, podríamos esperar o ponerla muy baja.
-    // Aquí la iniciamos para asegurar el contexto de audio.
-    startBackgroundMusic();
   }
 
   function handleNewGame() {
+    void playSound('ui.confirm');
     dispatch({ type: 'RESET' });
     router.push('/setup');
   }
@@ -65,11 +77,13 @@ export default function HomePage() {
       resolution: '/resolution',
       lobby: '/room',
     };
+    void playSound('ui.confirm');
     router.push(phaseRoutes[phase] ?? '/operative');
   }
 
   function handleClearSave() {
     if (confirm('¿Seguro? Se borrará la partida guardada y no podrás recuperarla.')) {
+      void playSound('ui.confirm');
       clearSave();
     }
   }
@@ -358,7 +372,10 @@ export default function HomePage() {
         <button
           id="btn-modo-multi"
           className="btn btn-ghost"
-          onClick={() => router.push('/multi/create')}
+          onClick={() => {
+            void playSound('ui.confirm');
+            router.push('/multi/create');
+          }}
           style={{
             fontSize: 'var(--text-md)', padding: '16px',
             borderColor: 'rgba(108,99,255,0.4)',
@@ -407,4 +424,3 @@ export default function HomePage() {
     </main>
   );
 }
-

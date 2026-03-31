@@ -1,40 +1,90 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { useGame } from '@/context/GameContext';
 import { ROLE_LABELS } from '@/lib/game/state';
 import { useLocalPlayer } from '@/lib/hooks/useLocalPlayer';
+import { playSound, startMatchAmbience } from '@/lib/sounds';
 
 export default function RoomPage() {
   const router = useRouter();
   const { state, dispatch } = useGame();
   const { playerId, savePlayerId } = useLocalPlayer();
 
+  useEffect(() => {
+    if (state.players.length === 0) {
+      router.replace('/setup');
+    }
+  }, [state.players.length, router]);
+
   if (state.players.length === 0) {
-    router.replace('/setup');
     return null;
   }
 
   function handleStartGame() {
     const isInd = state.config.mode === 'individual';
     if (isInd && !playerId) {
+      void playSound('game.error');
       alert('Por favor, selecciona quién sos en la lista antes de empezar.');
       return;
     }
+    void playSound('game.start');
+    void startMatchAmbience({ restart: true });
     dispatch({ type: 'START_GAME' });
     router.push('/reveal');
   }
 
   return (
-    <main className="page-shell">
-      <div className="page-header">
+    <main className="page-shell" style={{ position: 'relative', overflow: 'hidden' }}>
+      <div
+        aria-hidden
+        className="room-mobile-art"
+        style={{
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          bottom: 'calc(72px + env(safe-area-inset-bottom))',
+          zIndex: 0,
+          pointerEvents: 'none',
+          display: 'flex',
+          justifyContent: 'center',
+          opacity: 0.2,
+        }}
+      >
+        <div
+          style={{
+            position: 'relative',
+            width: 'min(100vw, 480px)',
+            height: '42dvh',
+            minHeight: 280,
+            filter: 'saturate(0.82) contrast(1.04)',
+            maskImage: 'linear-gradient(to top, transparent 0%, black 22%, black 72%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to top, transparent 0%, black 22%, black 72%, transparent 100%)',
+          }}
+        >
+          <Image
+            src="/img/Fondo-juicio.png"
+            alt=""
+            fill
+            sizes="100vw"
+            style={{
+              objectFit: 'cover',
+              objectPosition: 'center bottom',
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="page-header" style={{ position: 'relative', zIndex: 1 }}>
         <button className="btn btn-ghost btn-sm" style={{ width: 'auto' }} onClick={() => router.push('/setup')}>
           ← Configuración
         </button>
         <div className="phase-badge">Sala</div>
       </div>
 
-      <div className="page-content">
+      <div className="page-content" style={{ position: 'relative', zIndex: 1 }}>
         <div>
           <h2>Sala de espera</h2>
           <p className="mt-sm">
@@ -77,7 +127,11 @@ export default function RoomPage() {
                 <div 
                   key={player.id} 
                   className={`player-card ${isMe ? 'selected' : ''}`}
-                  onClick={() => state.config.mode === 'individual' && savePlayerId(player.id)}
+                  onClick={() => {
+                    if (state.config.mode !== 'individual') return;
+                    void playSound('ui.select');
+                    savePlayerId(player.id);
+                  }}
                   style={{ cursor: state.config.mode === 'individual' ? 'pointer' : 'default' }}
                 >
                   <div className="player-avatar" style={{ borderColor: isMe ? 'var(--accent)' : undefined }}>
@@ -104,11 +158,18 @@ export default function RoomPage() {
         </div>
       </div>
 
-      <div className="page-footer">
+      <div className="page-footer" style={{ position: 'sticky', zIndex: 2 }}>
         <button className="btn btn-primary" onClick={handleStartGame}>
           Iniciar Partida ✓
         </button>
       </div>
+      <style>{`
+        @media (min-width: 768px) {
+          .room-mobile-art {
+            display: none !important;
+          }
+        }
+      `}</style>
     </main>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
-import { playTick, playClick } from '@/lib/sounds';
+import { playSound, playTick } from '@/lib/sounds';
 
 export default function TrialPage() {
   const router = useRouter();
@@ -33,8 +33,13 @@ export default function TrialPage() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [isRunning]);
 
+  useEffect(() => {
+    if (state.players.length === 0) {
+      router.replace('/');
+    }
+  }, [state.players.length, router]);
+
   if (state.players.length === 0) {
-    router.replace('/');
     return null;
   }
 
@@ -49,6 +54,7 @@ export default function TrialPage() {
   const alivePlayers = state.players.filter((p) => p.isAlive);
 
   function handleGoToVote() {
+    void playSound('ui.confirm');
     dispatch({ type: 'NEXT_PHASE' }); // trial → vote
     router.push('/vote');
   }
@@ -101,7 +107,10 @@ export default function TrialPage() {
               <button
                 className="btn btn-primary btn-sm"
                 style={{ width: 'auto', minWidth: 120 }}
-                onClick={() => setIsRunning(true)}
+                onClick={() => {
+                  void playSound('ui.confirm');
+                  setIsRunning(true);
+                }}
               >
                 ▶ Iniciar
               </button>
@@ -110,7 +119,10 @@ export default function TrialPage() {
               <button
                 className="btn btn-ghost btn-sm"
                 style={{ width: 'auto', minWidth: 120 }}
-                onClick={() => setIsRunning(false)}
+                onClick={() => {
+                  void playSound('ui.click');
+                  setIsRunning(false);
+                }}
               >
                 ⏸ Pausar
               </button>
@@ -119,7 +131,10 @@ export default function TrialPage() {
               <button
                 className="btn btn-primary btn-sm"
                 style={{ width: 'auto', minWidth: 120 }}
-                onClick={() => setIsRunning(true)}
+                onClick={() => {
+                  void playSound('ui.confirm');
+                  setIsRunning(true);
+                }}
               >
                 ▶ Reanudar
               </button>
@@ -128,7 +143,11 @@ export default function TrialPage() {
               <button
                 className="btn btn-ghost btn-sm"
                 style={{ width: 'auto' }}
-                onClick={() => { setSecondsLeft(duration); setIsRunning(false); }}
+                onClick={() => {
+                  void playSound('ui.click');
+                  setSecondsLeft(duration);
+                  setIsRunning(false);
+                }}
               >
                 ↺ Reiniciar
               </button>
