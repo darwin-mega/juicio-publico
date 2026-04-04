@@ -112,6 +112,14 @@ export async function startGame(payload: StartGamePayload): Promise<ApiResponse<
   });
 }
 
+export async function restartGame(payload: StartGamePayload): Promise<ApiResponse<MultiRoomState>> {
+  return apiFetch<MultiRoomState>('/api/multi/restart', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    deviceId: payload.deviceId,
+  });
+}
+
 // --- Confirmar revelación de rol ---
 
 export async function confirmReveal(roomId: string, deviceId: string): Promise<ApiResponse<void>> {

@@ -151,6 +151,18 @@ export function resolveVote(
 
 // --- Condición de victoria ---
 
+export function checkWinConditionByCounts(
+  aliveKillers: number,
+  aliveTown: number,
+  aliveSpecial: number,
+  initialKillers: number
+): 'killers' | 'town' | null {
+  if (aliveKillers === 0) return 'town';
+  if (aliveKillers >= aliveTown) return 'killers';
+  if (initialKillers === 1 && aliveSpecial === 0) return 'killers';
+  return null;
+}
+
 /**
  * Evalúa la condición de victoria tras cada eliminación.
  *
@@ -174,23 +186,11 @@ export function checkWinCondition(
   const alive = players.filter((p) => p.isAlive);
   const aliveKillers = alive.filter((p) => p.role === 'killer').length;
   const aliveTown   = alive.filter((p) => p.role !== 'killer').length;
+  const aliveSpecial = alive.filter(
+    (p) => p.role === 'cop' || p.role === 'doctor'
+  ).length;
 
-  // El pueblo gana si no quedan asesinos
-  if (aliveKillers === 0) return 'town';
-
-  // Condición numérica (aplica siempre)
-  if (aliveKillers >= aliveTown) return 'killers';
-
-  // Condición extra solo para asesino solitario:
-  // gana también si no quedan ni policías ni doctor
-  if (initialKillers === 1) {
-    const aliveSpecial = alive.filter(
-      (p) => p.role === 'cop' || p.role === 'doctor'
-    ).length;
-    if (aliveSpecial === 0) return 'killers';
-  }
-
-  return null;
+  return checkWinConditionByCounts(aliveKillers, aliveTown, aliveSpecial, initialKillers);
 }
 
 // --- Constructor de jugador ---

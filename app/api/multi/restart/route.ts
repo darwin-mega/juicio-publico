@@ -1,10 +1,6 @@
-// app/api/multi/start/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteOperativeProposal, getRoom, saveRoom, saveSecret } from '@/lib/multi/redis';
-import {
-  assignMultiRoles,
-  createInitialGameState,
-} from '@/lib/multi/gameLogic';
+import { assignMultiRoles, createInitialGameState } from '@/lib/multi/gameLogic';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,45 +12,44 @@ export async function POST(req: NextRequest) {
     }
 
     const room = await getRoom(roomId);
-    if (!room) {
+    if (!room || !room.game) {
       return NextResponse.json({ error: 'Sala no encontrada.' }, { status: 404 });
     }
 
     if (room.hostId !== deviceId) {
-      return NextResponse.json({ error: 'Solo el host puede iniciar la partida.' }, { status: 403 });
+      return NextResponse.json({ error: 'Solo el host puede reiniciar la partida.' }, { status: 403 });
     }
 
-    if (room.status !== 'lobby') {
-      return NextResponse.json({ error: 'La partida ya inició.' }, { status: 409 });
+    if (!room.game.isOver) {
+      return NextResponse.json({ error: 'La partida todavia no termino.' }, { status: 409 });
     }
 
-    if (room.players.length < 4) {
-      return NextResponse.json({ error: 'Se necesitan al menos 4 jugadores.' }, { status: 400 });
-    }
+    const resetPlayers = room.players.map((player) => ({
+      ...player,
+      isAlive: true,
+      isRevealed: false,
+      readyForOperative: false,
+    }));
 
-    // Asignar roles server-side (los secretos nunca van al cliente directamente)
-    const secrets = assignMultiRoles(room.players, room.config);
+    const secrets = assignMultiRoles(resetPlayers, room.config);
 
-    // Guardar cada secreto en Redis por separado
     for (const [pid, secret] of Object.entries(secrets)) {
       await saveSecret(roomId, pid, secret);
       await deleteOperativeProposal(roomId, pid);
     }
 
-    // Crear el estado de juego inicial
-    const game = createInitialGameState(room.players);
-
     const updatedRoom = {
       ...room,
       status: 'playing' as const,
-      game,
+      players: resetPlayers,
+      game: createInitialGameState(resetPlayers),
       updatedAt: Date.now(),
     };
 
     await saveRoom(updatedRoom);
     return NextResponse.json(updatedRoom);
   } catch (err) {
-    console.error('[multi/start]', err);
-    return NextResponse.json({ error: 'Error interno al iniciar la partida.' }, { status: 500 });
+    console.error('[multi/restart]', err);
+    return NextResponse.json({ error: 'Error interno al reiniciar la partida.' }, { status: 500 });
   }
 }

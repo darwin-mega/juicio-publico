@@ -18,7 +18,7 @@ import type {
   DeviceId,
 } from './types';
 import type { Role, RoundReport } from '@/lib/game/state';
-import { assignRoles, buildPlayer } from '@/lib/game/rules';
+import { assignRoles, buildPlayer, checkWinConditionByCounts } from '@/lib/game/rules';
 
 // --- Asignación de roles en modo multi ---
 
@@ -160,7 +160,8 @@ export function resolveMultiOperative(
   players: MultiPlayer[],
   secrets: Record<DeviceId, PlayerSecret>,
   pendingActions: Record<DeviceId, PlayerOperativeAction | null>,
-  round: number
+  round: number,
+  initialKillers: number
 ): {
   updatedPlayers: MultiPlayer[];
   report: RoundReport;
@@ -220,7 +221,7 @@ export function resolveMultiOperative(
     expelledWasKiller: null,
   };
 
-  const winnerFaction = checkMultiWinCondition(updatedPlayers, secrets);
+  const winnerFaction = checkMultiWinCondition(updatedPlayers, secrets, initialKillers);
 
   return { updatedPlayers, report, winnerFaction };
 }
@@ -277,22 +278,18 @@ export function resolveMultiVote(
 
 export function checkMultiWinCondition(
   players: MultiPlayer[],
-  secrets: Record<DeviceId, PlayerSecret>
+  secrets: Record<DeviceId, PlayerSecret>,
+  initialKillers: number
 ): 'killers' | 'town' | null {
   const alive = players.filter((p) => p.isAlive);
   const aliveKillers = alive.filter((p) => secrets[p.deviceId]?.role === 'killer').length;
   const aliveTown    = alive.filter((p) => secrets[p.deviceId]?.role !== 'killer').length;
-
-  if (aliveKillers === 0) return 'town';
-  if (aliveKillers >= aliveTown) return 'killers';
-
   const aliveSpecial = alive.filter((p) => {
     const role = secrets[p.deviceId]?.role;
     return role === 'cop' || role === 'doctor';
   }).length;
-  if (aliveSpecial === 0) return 'killers';
 
-  return null;
+  return checkWinConditionByCounts(aliveKillers, aliveTown, aliveSpecial, initialKillers);
 }
 
 // --- Avance de fases ---

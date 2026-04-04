@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
         resolveMultiVote(room.players, updatedVotes, secrets);
       updatedPlayers = newPlayers;
 
-      const winner = checkMultiWinCondition(updatedPlayers, secrets);
+      const winner = checkMultiWinCondition(updatedPlayers, secrets, room.config.killerCount);
 
       // Actualizar el último reporte con expulsado
       const lastReport = room.game.reports[room.game.reports.length - 1];

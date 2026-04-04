@@ -92,7 +92,7 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
         setError(null);
 
         // Si la partida inició y no tenemos secreto, pedirlo
-        if (result.data.status === 'playing' && !secret) {
+        if (result.data.status === 'playing' && (!secret || result.data.game?.phase === 'reveal')) {
           const secretResult = await getPlayerSecret(roomId, deviceId);
           if (secretResult.ok && secretResult.data) {
             setSecret(secretResult.data);

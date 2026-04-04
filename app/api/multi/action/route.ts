@@ -160,10 +160,11 @@ export async function POST(req: NextRequest) {
         room.players,
         secrets,
         updatedPendingActions,
-        room.game.round
+        room.game.round,
+        room.config.killerCount
       );
 
-      const winner = winnerFaction ?? checkMultiWinCondition(updatedPlayers, secrets);
+      const winner = winnerFaction ?? checkMultiWinCondition(updatedPlayers, secrets, room.config.killerCount);
 
       updatedRoom = {
         ...updatedRoom,

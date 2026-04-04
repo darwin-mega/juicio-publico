@@ -19,6 +19,7 @@ import {
   submitOperativeAction,
   castVote,
   advancePhase,
+  restartGame,
 } from '@/lib/multi/api';
 import {
   ROLE_LABELS,
@@ -977,7 +978,31 @@ function VoteView({
     if (!selected) return;
     void playSound('game.voteCast');
     setSubmitting(true);
-    onVote(selected);
+    await onVote(selected);
+  }
+
+  if (!me.isAlive) {
+    return (
+      <main className="page-shell" style={{ justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--sp-lg)' }}>
+          <div style={{ fontSize: 48 }}>🚫</div>
+          <div>
+            <h3>No puedes votar</h3>
+            <p className="text-muted" style={{ marginTop: 8 }}>
+              No puedes votar hasta el proximo juego.
+            </p>
+          </div>
+          <div className="card" style={{ padding: 'var(--sp-md)', minWidth: 220, textAlign: 'center' }}>
+            <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, color: 'var(--accent)' }}>
+              {votedCount}/{totalVoters}
+            </div>
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+              votos emitidos
+            </div>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   if (hasVoted) {
@@ -1080,12 +1105,17 @@ function ResolutionView({
   isHost,
   onAdvance,
   advancing,
+  onRestart,
+  restarting,
 }: {
   room: MultiRoomState;
   isHost: boolean;
   onAdvance: () => void;
   advancing: boolean;
+  onRestart: () => void;
+  restarting: boolean;
 }) {
+  const router = useRouter();
   const lastReport = room.game?.reports[room.game.reports.length - 1];
   const isOver = room.game?.isOver ?? false;
   const winner = room.game?.winnerFaction;
@@ -1150,6 +1180,33 @@ function ResolutionView({
                 </span>
               </div>
             ))}
+          </div>
+
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' }}>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                void playSound('ui.confirm');
+                onRestart();
+              }}
+              disabled={!isHost || restarting}
+              style={{ fontSize: 'var(--text-md)', padding: '16px' }}
+            >
+              {isHost
+                ? (restarting ? 'Reiniciando...' : 'Reiniciar con los mismos participantes')
+                : 'Solo el host puede reiniciar'}
+            </button>
+
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                void playSound('ui.click', { bypassCooldown: true });
+                router.push('/');
+              }}
+              style={{ fontSize: 'var(--text-md)', padding: '16px' }}
+            >
+              ← Volver al inicio
+            </button>
           </div>
         </div>
       </main>
@@ -1248,6 +1305,7 @@ export default function MultiGamePage() {
 
   const [revealDone, setRevealDone] = useState(false);
   const [advancing, setAdvancing] = useState(false);
+  const [restarting, setRestarting] = useState(false);
 
   // Iniciar polling para esta sala
   useEffect(() => {
@@ -1257,7 +1315,7 @@ export default function MultiGamePage() {
 
   // Detectar si el jugador ya marcó su reveal en el estado de la sala
   useEffect(() => {
-    if (myPlayer?.readyForOperative) setRevealDone(true);
+    setRevealDone(Boolean(myPlayer?.readyForOperative));
   }, [myPlayer]);
 
   if (loading && !room) {
@@ -1316,6 +1374,25 @@ export default function MultiGamePage() {
     await advancePhase({ roomId, deviceId });
     await refresh();
     setAdvancing(false);
+  }
+
+  async function handleRestart() {
+    if (!isHost) {
+      return;
+    }
+
+    setRestarting(true);
+    const result = await restartGame({ roomId, deviceId });
+    if (!result.ok) {
+      void playSound('game.error');
+      setRestarting(false);
+      return;
+    }
+
+    void playSound('game.start');
+    setRevealDone(false);
+    await refresh();
+    setRestarting(false);
   }
 
   // Router de fases
@@ -1388,6 +1465,8 @@ export default function MultiGamePage() {
         isHost={isHost}
         onAdvance={handleAdvance}
         advancing={advancing}
+        onRestart={handleRestart}
+        restarting={restarting}
       />
     );
   }
