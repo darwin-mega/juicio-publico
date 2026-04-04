@@ -39,6 +39,7 @@ class AudioManager {
   private audioContext: AudioContext | null = null;
   private bufferCache = new Map<string, AudioBuffer | null>();
   private bufferPromiseCache = new Map<string, Promise<AudioBuffer | null>>();
+  private contextPrimed = false;
   private hydrated = false;
   private listeners = new Set<() => void>();
   private masterGain: GainNode | null = null;
@@ -53,6 +54,7 @@ class AudioManager {
   private sfxGain: GainNode | null = null;
   private soundCooldowns = new Map<SoundKey, number>();
   private unlockCleanup: (() => void) | null = null;
+  private unlockPromise: Promise<boolean> | null = null;
 
   private emit() {
     this.syncHtmlMediaElements();
@@ -128,6 +130,7 @@ class AudioManager {
     }
 
     this.audioContext = new AudioContextClass();
+    this.contextPrimed = false;
     this.masterGain = this.audioContext.createGain();
     this.musicGain = this.audioContext.createGain();
     this.musicDuckGain = this.audioContext.createGain();
@@ -192,6 +195,34 @@ class AudioManager {
     });
   }
 
+  private async primeAudioContext(ctx: AudioContext) {
+    if (this.contextPrimed || ctx.state !== 'running') {
+      return;
+    }
+
+    try {
+      const source = ctx.createBufferSource();
+      const gain = ctx.createGain();
+
+      source.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+
+      source.connect(gain);
+      gain.connect(ctx.destination);
+
+      source.onended = () => {
+        source.disconnect();
+        gain.disconnect();
+      };
+
+      source.start(0);
+      source.stop(ctx.currentTime + 0.001);
+      this.contextPrimed = true;
+    } catch {
+      // noop
+    }
+  }
+
   private async resumeContext() {
     const ctx = this.ensureContext();
     if (!ctx) {
@@ -206,9 +237,15 @@ class AudioManager {
       }
     }
 
-    if (ctx.state === 'running' && !this.prefState.unlocked) {
-      this.prefState = { ...this.prefState, unlocked: true };
-      this.emit();
+    if (ctx.state === 'running') {
+      await this.primeAudioContext(ctx);
+
+      if (!this.prefState.unlocked) {
+        this.prefState = { ...this.prefState, unlocked: true };
+        this.emit();
+      } else {
+        this.syncHtmlMediaElements();
+      }
     }
 
     return ctx;
@@ -373,11 +410,21 @@ class AudioManager {
       return this.clearUnlockListeners.bind(this);
     }
 
+    let unlockScheduled = false;
     const unlock = () => {
-      void this.unlock();
+      if (unlockScheduled || this.prefState.unlocked) {
+        return;
+      }
+
+      unlockScheduled = true;
+      void this.unlock().finally(() => {
+        if (!this.prefState.unlocked) {
+          unlockScheduled = false;
+        }
+      });
     };
 
-    const events: Array<keyof DocumentEventMap> = ['pointerdown', 'keydown', 'touchend'];
+    const events: Array<keyof DocumentEventMap> = ['pointerdown', 'touchstart', 'touchend', 'click', 'keydown'];
     events.forEach((eventName) => {
       document.addEventListener(eventName, unlock, true);
     });
@@ -392,18 +439,31 @@ class AudioManager {
   };
 
   async unlock() {
-    const ctx = await this.resumeContext();
-    if (!ctx || ctx.state !== 'running') {
-      return false;
+    if (this.unlockPromise) {
+      return this.unlockPromise;
     }
 
-    this.clearUnlockListeners();
+    this.unlockPromise = (async () => {
+      const ctx = await this.resumeContext();
+      if (!ctx || ctx.state !== 'running') {
+        return false;
+      }
 
-    if (this.pendingAmbienceKey) {
-      void this.setAmbience(this.pendingAmbienceKey);
+      this.syncHtmlMediaElements();
+      this.clearUnlockListeners();
+
+      if (this.pendingAmbienceKey) {
+        void this.setAmbience(this.pendingAmbienceKey);
+      }
+
+      return true;
+    })();
+
+    try {
+      return await this.unlockPromise;
+    } finally {
+      this.unlockPromise = null;
     }
-
-    return true;
   }
 
   setMuted(muted: boolean) {

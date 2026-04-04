@@ -43,6 +43,7 @@ export default function HomePage() {
     if (videoRef.current) {
       videoRef.current.pause();
     }
+    void unlockAudio();
     void playSound('ui.confirm');
     setShowIntro(false);
     setPreInteraction(false);
@@ -52,21 +53,39 @@ export default function HomePage() {
   }
 
   async function handleStartIntro() {
-    await unlockAudio();
-    void playSound('ui.confirm', { bypassCooldown: true });
-    // Intentar reproducir el trailer respetando el mute global
-    if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.currentTime = 0;
-      videoRef.current.muted = getAudioState().muted;
-      videoRef.current.play().catch(() => {
+    const video = videoRef.current;
+    const audioState = getAudioState();
+    const unlockPromise = unlockAudio();
+    // Reproducimos el trailer dentro del mismo toque para que iOS no bloquee el audio.
+    if (video) {
+      video.pause();
+      video.currentTime = 0;
+      video.dataset.audioLocked = 'false';
+      video.defaultMuted = audioState.muted;
+      video.muted = audioState.muted;
+      video.volume = Math.max(0, Math.min(1, audioState.masterVolume * audioState.musicVolume));
+      const playResult = await video.play().then(
+        () => true,
+        async () => {
         // Fallback si falla el trailer: al menos dejamos música de fondo
-        console.warn('Autoplay con sonido bloqueado incluso tras clic');
+          video.muted = true;
+          try {
+            await video.play();
+            return true;
+          } catch {
+            return false;
+          }
+        }
+      );
+
+      if (!playResult) {
+        console.warn('Autoplay del trailer bloqueado tras el toque inicial');
         restoreMusic(600);
-        void startLobbyAmbience();
-      });
+        void startLobbyAmbience({ restart: true });
+      }
     }
     setPreInteraction(false);
+    void unlockPromise;
   }
 
   function handleNewGame() {
