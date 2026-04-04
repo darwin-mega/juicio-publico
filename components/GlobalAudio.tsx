@@ -23,11 +23,11 @@ function resolveDesiredAmbience(
   pathname: string | null,
   hasActivePhase: boolean,
   publicMultiAudioEnabled: boolean
-): AmbienceKey | null {
+): AmbienceKey | null | undefined {
   const currentPath = pathname ?? '';
 
   if (currentPath === '/') {
-    return null;
+    return undefined;
   }
 
   if (currentPath.startsWith('/multi/game/')) {
@@ -136,6 +136,10 @@ export default function GlobalAudio() {
   }, [currentPath]);
 
   useEffect(() => {
+    if (desiredAmbience === undefined) {
+      return;
+    }
+
     restoreMusic(600);
 
     if (!desiredAmbience) {

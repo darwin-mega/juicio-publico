@@ -8,10 +8,13 @@
 // ============================================================
 
 import type {
+  CoordinatedTeamKey,
+  OperativeProposal,
   MultiPlayer,
   MultiGameState,
   PlayerSecret,
   PlayerOperativeAction,
+  TeamOperativeSelection,
   DeviceId,
 } from './types';
 import type { Role, RoundReport } from '@/lib/game/state';
@@ -82,6 +85,61 @@ export function createInitialGameState(players: MultiPlayer[]): MultiGameState {
     isOver: false,
     trialStartedAt: null,
   };
+}
+
+export function getCoordinatedTeamKey(role: Role): CoordinatedTeamKey | null {
+  if (role === 'killer') return 'killers';
+  if (role === 'cop') return 'cops';
+  return null;
+}
+
+export function getAliveTeamMemberIds(
+  secret: PlayerSecret,
+  players: MultiPlayer[]
+): DeviceId[] {
+  const aliveIds = new Set(players.filter((p) => p.isAlive).map((p) => p.deviceId));
+  return [secret.deviceId, ...secret.teammateIds].filter((deviceId) => aliveIds.has(deviceId));
+}
+
+export function deriveTeamOperativeSelection(
+  team: CoordinatedTeamKey,
+  proposals: OperativeProposal[]
+): TeamOperativeSelection | null {
+  if (proposals.length === 0) {
+    return null;
+  }
+
+  const latestProposal = proposals.reduce((latest, current) =>
+    current.submittedAt >= latest.submittedAt ? current : latest
+  );
+
+  const confirmedBy = Array.from(new Set(
+    proposals
+      .filter((proposal) =>
+        proposal.actionType === latestProposal.actionType &&
+        proposal.targetPlayerId === latestProposal.targetPlayerId
+      )
+      .map((proposal) => proposal.deviceId)
+  ));
+
+  return {
+    team,
+    actionType: latestProposal.actionType,
+    targetPlayerId: latestProposal.targetPlayerId,
+    confirmedBy,
+    updatedAt: latestProposal.submittedAt,
+  };
+}
+
+export function isTeamSelectionConfirmed(
+  selection: TeamOperativeSelection | null,
+  teamMemberIds: DeviceId[]
+): boolean {
+  if (!selection || teamMemberIds.length === 0) {
+    return false;
+  }
+
+  return teamMemberIds.every((deviceId) => selection.confirmedBy.includes(deviceId));
 }
 
 // --- Resolución del operativo ---

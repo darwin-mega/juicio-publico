@@ -59,7 +59,8 @@ interface MultiRoomContextValue {
 
 const MultiRoomContext = createContext<MultiRoomContextValue | null>(null);
 
-const POLL_INTERVAL_MS = 2000; // Polling cada 2 segundos
+const DEFAULT_POLL_INTERVAL_MS = 2000;
+const OPERATIVE_POLL_INTERVAL_MS = 900;
 
 // --- Provider ---
 
@@ -108,6 +109,10 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
     }
   }, [roomId, deviceId, secret]);
 
+  const pollIntervalMs = room?.game?.phase === 'operative'
+    ? OPERATIVE_POLL_INTERVAL_MS
+    : DEFAULT_POLL_INTERVAL_MS;
+
   // Iniciar polling cuando hay roomId
   useEffect(() => {
     if (!roomId) return;
@@ -115,12 +120,12 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     fetchRoomState();
 
-    pollTimerRef.current = setInterval(fetchRoomState, POLL_INTERVAL_MS);
+    pollTimerRef.current = setInterval(fetchRoomState, pollIntervalMs);
 
     return () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
-  }, [roomId, fetchRoomState]);
+  }, [roomId, fetchRoomState, pollIntervalMs]);
 
   function joinRoom(id: string) {
     setRoomId(id);

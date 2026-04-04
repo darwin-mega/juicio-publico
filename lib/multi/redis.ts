@@ -9,7 +9,7 @@
 // Todas las operaciones son async para uso en API routes.
 // ============================================================
 
-import type { MultiRoomState, PlayerSecret, DeviceId, RoomId } from './types';
+import type { MultiRoomState, OperativeProposal, PlayerSecret, DeviceId, RoomId } from './types';
 
 // --- Configuración de Prefijo ---
 // Usamos 'jp:' para Juicio Público para evitar colisiones si se comparte
@@ -20,6 +20,7 @@ const PREFIX = 'jp';
 export const KEYS = {
   room: (roomId: RoomId) => `${PREFIX}:room:${roomId}`,
   secret: (roomId: RoomId, deviceId: DeviceId) => `${PREFIX}:secret:${roomId}:${deviceId}`,
+  operativeProposal: (roomId: RoomId, deviceId: DeviceId) => `${PREFIX}:operative:${roomId}:${deviceId}`,
 } as const;
 
 // TTL de 4 horas para salas activas
@@ -153,6 +154,42 @@ export async function getSecret(
   return memGet<PlayerSecret>(KEYS.secret(roomId, deviceId));
 }
 
+export async function saveOperativeProposal(
+  roomId: RoomId,
+  deviceId: DeviceId,
+  proposal: OperativeProposal
+): Promise<void> {
+  if (USE_REDIS) {
+    const redis = getRedis();
+    await redis.set(KEYS.operativeProposal(roomId, deviceId), proposal, { ex: ROOM_TTL_SECONDS });
+  } else {
+    memSet(KEYS.operativeProposal(roomId, deviceId), proposal, ROOM_TTL_SECONDS);
+  }
+}
+
+export async function getOperativeProposal(
+  roomId: RoomId,
+  deviceId: DeviceId
+): Promise<OperativeProposal | null> {
+  if (USE_REDIS) {
+    const redis = getRedis();
+    return redis.get<OperativeProposal>(KEYS.operativeProposal(roomId, deviceId));
+  }
+  return memGet<OperativeProposal>(KEYS.operativeProposal(roomId, deviceId));
+}
+
+export async function deleteOperativeProposal(
+  roomId: RoomId,
+  deviceId: DeviceId
+): Promise<void> {
+  if (USE_REDIS) {
+    const redis = getRedis();
+    await redis.del(KEYS.operativeProposal(roomId, deviceId));
+  } else {
+    memDel(KEYS.operativeProposal(roomId, deviceId));
+  }
+}
+
 export async function deleteRoom(roomId: RoomId): Promise<void> {
   if (USE_REDIS) {
     const redis = getRedis();
@@ -161,4 +198,3 @@ export async function deleteRoom(roomId: RoomId): Promise<void> {
     memDel(KEYS.room(roomId));
   }
 }
-

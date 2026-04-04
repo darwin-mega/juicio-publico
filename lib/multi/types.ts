@@ -45,6 +45,24 @@ export interface PlayerOperativeAction {
   submittedAt: number;
 }
 
+export type CoordinatedTeamKey = 'killers' | 'cops';
+
+export interface OperativeProposal {
+  deviceId: DeviceId;
+  actionType: Extract<OperativeActionType, 'kill' | 'inspect'>;
+  targetPlayerId: DeviceId;
+  submittedAt: number;
+  round: number;
+}
+
+export interface TeamOperativeSelection {
+  team: CoordinatedTeamKey;
+  actionType: Extract<OperativeActionType, 'kill' | 'inspect'>;
+  targetPlayerId: DeviceId | null;
+  confirmedBy: DeviceId[];
+  updatedAt: number;
+}
+
 // --- Estado del juego dentro de la sala ---
 
 export type MultiGamePhase = 'reveal' | 'operative' | 'news' | 'trial' | 'vote' | 'resolution';
@@ -54,6 +72,7 @@ export interface MultiGameState {
   round: number;
   // DeviceId → acción enviada (null = aún no envió)
   pendingActions: Record<DeviceId, PlayerOperativeAction | null>;
+  teamSelections?: Partial<Record<CoordinatedTeamKey, TeamOperativeSelection>>;
   // DeviceId → DeviceId del votado
   votes: Record<DeviceId, DeviceId>;
   reports: RoundReport[];

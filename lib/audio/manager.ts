@@ -171,14 +171,24 @@ class AudioManager {
       return;
     }
 
-    const volume = clamp(this.prefState.masterVolume);
     document.querySelectorAll('audio, video').forEach((node) => {
       if (!(node instanceof HTMLMediaElement)) {
         return;
       }
 
-      node.muted = this.prefState.muted;
-      node.volume = volume;
+      const channel = node.dataset.audioChannel;
+      const lockMuted = node.dataset.audioLocked === 'true';
+      const masterVolume = clamp(this.prefState.masterVolume);
+
+      let channelVolume = 1;
+      if (channel === 'music') {
+        channelVolume = clamp(this.prefState.musicVolume);
+      } else if (channel === 'sfx') {
+        channelVolume = clamp(this.prefState.sfxVolume);
+      }
+
+      node.muted = this.prefState.muted || lockMuted;
+      node.volume = clamp(masterVolume * channelVolume);
     });
   }
 

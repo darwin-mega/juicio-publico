@@ -255,24 +255,56 @@ function OperativeView({
   room: MultiRoomState;
   deviceId: string;
   hasActed: boolean;
-  onAction: (type: 'kill' | 'save' | 'inspect' | 'neutral', targetId: string | null) => void;
+  onAction: (type: 'kill' | 'save' | 'inspect' | 'neutral', targetId: string | null) => Promise<void>;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [syncingTargetId, setSyncingTargetId] = useState<string | null>(null);
+  const autoCommitSharedTargetRef = useRef<string | null>(null);
 
   const alivePlayers = room.players.filter((p) => p.isAlive);
   const pendingCount = Object.values(room.game?.pendingActions ?? {}).filter((v) => v === null).length;
-  const totalAlive = alivePlayers.length;
 
   const roleColor = ROLE_COLORS[secret.role];
   const isKiller  = secret.role === 'killer';
   const isTown    = secret.role === 'town';
+  const roleTint = secret.role === 'killer'
+    ? 'rgba(224,82,82,0.10)'
+    : secret.role === 'cop'
+      ? 'rgba(87,140,255,0.10)'
+      : secret.role === 'doctor'
+        ? 'rgba(76,182,124,0.10)'
+        : 'rgba(255,255,255,0.04)';
+  const aliveTeamMemberIds = [deviceId, ...secret.teammateIds].filter((memberId) =>
+    alivePlayers.some((player) => player.deviceId === memberId)
+  );
+  const teamKey = secret.role === 'killer'
+    ? 'killers'
+    : secret.role === 'cop'
+      ? 'cops'
+      : null;
+  const sharedSelection = teamKey ? room.game?.teamSelections?.[teamKey] : undefined;
+  const sharedTargetId = sharedSelection?.targetPlayerId ?? null;
+  const sharedTargetPlayer = sharedTargetId
+    ? room.players.find((player) => player.deviceId === sharedTargetId) ?? null
+    : null;
+  const usesSharedTarget = Boolean(
+    teamKey &&
+    (secret.role === 'killer' || secret.role === 'cop') &&
+    aliveTeamMemberIds.length > 1
+  );
+  const sharedConfirmed = usesSharedTarget &&
+    Boolean(sharedTargetId) &&
+    aliveTeamMemberIds.every((memberId) => sharedSelection?.confirmedBy.includes(memberId));
+  const iConfirmedSharedTarget = usesSharedTarget && sharedSelection?.confirmedBy.includes(deviceId);
 
   // Configuración por rol
   const config = {
     killer: {
       title: 'Elegí tu objetivo',
-      instruction: 'Esta noche, ¿a quién atacás?',
+      instruction: usesSharedTarget
+        ? 'La primera marca se comparte al instante. Toquen el mismo objetivo para confirmar.'
+        : 'Esta noche, ¿a quién atacás?',
       emoji: '🔪',
       actionType: 'kill' as const,
       // Killers no atacan a sus compañeros
@@ -289,7 +321,9 @@ function OperativeView({
     },
     cop: {
       title: 'Investigar',
-      instruction: '¿A quién investigás?',
+      instruction: usesSharedTarget
+        ? 'Tu compañero verá tu sospechoso. Toquen el mismo objetivo para confirmar.'
+        : '¿A quién investigás?',
       emoji: '🔍',
       actionType: 'inspect' as const,
       eligibleTargets: alivePlayers.filter((p) => p.deviceId !== deviceId),
@@ -307,14 +341,63 @@ function OperativeView({
     if (isTown) {
       void playSound('ui.confirm');
       setConfirming(true);
-      onAction('neutral', null);
+      try {
+        await onAction('neutral', null);
+      } finally {
+        setConfirming(false);
+      }
       return;
     }
+
     if (!selected) return;
+
     void playSound('ui.confirm');
     setConfirming(true);
-    onAction(config.actionType, selected);
+    try {
+      await onAction(config.actionType, selected);
+    } finally {
+      setConfirming(false);
+    }
   }
+
+  async function handleSharedTargetTap(targetId: string) {
+    if (!usesSharedTarget || syncingTargetId) {
+      return;
+    }
+
+    if (sharedTargetId === targetId && iConfirmedSharedTarget) {
+      return;
+    }
+
+    if (sharedTargetId === targetId) {
+      void playSound('ui.confirm');
+    } else {
+      void playSound('ui.select');
+    }
+
+    setSyncingTargetId(targetId);
+    try {
+      await onAction(config.actionType, targetId);
+    } finally {
+      setSyncingTargetId(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!usesSharedTarget || !sharedConfirmed || !sharedTargetId || hasActed || syncingTargetId) {
+      if (!sharedConfirmed) {
+        autoCommitSharedTargetRef.current = null;
+      }
+      return;
+    }
+
+    if (autoCommitSharedTargetRef.current === sharedTargetId) {
+      return;
+    }
+
+    autoCommitSharedTargetRef.current = sharedTargetId;
+    void onAction(config.actionType, sharedTargetId);
+  }, [config.actionType, hasActed, onAction, sharedConfirmed, sharedTargetId, syncingTargetId, usesSharedTarget]);
 
   if (hasActed) {
     return (
@@ -327,6 +410,20 @@ function OperativeView({
               Esperando a los demás jugadores...
             </p>
           </div>
+          {usesSharedTarget && sharedTargetPlayer && (
+            <div
+              className="info-box"
+              style={{
+                width: 'min(320px, 100%)',
+                borderColor: 'var(--success)',
+                color: 'var(--success)',
+                textAlign: 'center',
+              }}
+            >
+              <strong style={{ display: 'block', marginBottom: 6 }}>Objetivo confirmado</strong>
+              {sharedTargetPlayer.name}
+            </div>
+          )}
           <div className="card" style={{ padding: 'var(--sp-md)', minWidth: 200, textAlign: 'center' }}>
             <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, color: 'var(--accent)' }}>
               {pendingCount}
@@ -356,11 +453,43 @@ function OperativeView({
           <p style={{ fontSize: 'var(--text-sm)' }}>{config.instruction}</p>
         </div>
 
+        {usesSharedTarget && !sharedTargetPlayer && (
+          <div className="info-box" style={{ borderColor: roleColor, color: roleColor }}>
+            La primera selección se comparte con tu compañero en tiempo real.
+          </div>
+        )}
+
+        {usesSharedTarget && sharedTargetPlayer && !sharedConfirmed && !iConfirmedSharedTarget && (
+          <div className="info-box" style={{ borderColor: roleColor, color: roleColor }}>
+            <strong style={{ display: 'block', marginBottom: 6 }}>Tu compañero propone este objetivo</strong>
+            {sharedTargetPlayer.name}
+          </div>
+        )}
+
+        {usesSharedTarget && sharedTargetPlayer && !sharedConfirmed && iConfirmedSharedTarget && (
+          <div className="info-box" style={{ borderColor: roleColor, color: roleColor }}>
+            <strong style={{ display: 'block', marginBottom: 6 }}>Esperando a tu compañero</strong>
+            Marcaste a {sharedTargetPlayer.name}. Falta una confirmación más.
+          </div>
+        )}
+
+        {usesSharedTarget && sharedTargetPlayer && sharedConfirmed && (
+          <div className="info-box" style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
+            <strong style={{ display: 'block', marginBottom: 6 }}>Objetivo confirmado</strong>
+            {sharedTargetPlayer.name}
+          </div>
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' }}>
           {config.eligibleTargets.map((p, i) => (
             <button
               key={p.deviceId}
+              disabled={syncingTargetId !== null}
               onClick={() => {
+                if (usesSharedTarget) {
+                  void handleSharedTargetTap(p.deviceId);
+                  return;
+                }
                 if (isTown) return;
                 void playSound('ui.select');
                 setSelected(sel => sel === p.deviceId ? null : p.deviceId);
@@ -369,24 +498,66 @@ function OperativeView({
                 background: 'none', border: 'none', padding: 0,
                 textAlign: 'left', cursor: isTown ? 'default' : 'pointer',
                 animation: `slideUp 0.28s ${i * 0.04}s both`,
+                opacity: syncingTargetId && syncingTargetId !== p.deviceId ? 0.75 : 1,
               }}
             >
               <div
-                className={`player-card ${selected === p.deviceId ? 'selected' : ''}`}
+                className={`player-card ${
+                  (usesSharedTarget && sharedTargetId === p.deviceId) || (!usesSharedTarget && selected === p.deviceId)
+                    ? 'selected'
+                    : ''
+                }`}
                 style={{
-                  borderColor: selected === p.deviceId ? roleColor : undefined,
-                  background: selected === p.deviceId ? `${roleColor}18` : undefined,
-                  transform: selected === p.deviceId ? 'scale(1.02)' : 'scale(1)',
-                  transition: 'transform 0.15s, border-color 0.15s, background 0.15s',
+                  borderColor:
+                    usesSharedTarget && sharedTargetId === p.deviceId && sharedConfirmed
+                      ? 'var(--success)'
+                      : (usesSharedTarget && sharedTargetId === p.deviceId) || (!usesSharedTarget && selected === p.deviceId)
+                        ? roleColor
+                        : undefined,
+                  background:
+                    usesSharedTarget && sharedTargetId === p.deviceId && sharedConfirmed
+                      ? 'rgba(70,186,120,0.12)'
+                      : (usesSharedTarget && sharedTargetId === p.deviceId) || (!usesSharedTarget && selected === p.deviceId)
+                        ? roleTint
+                        : undefined,
+                  boxShadow:
+                    usesSharedTarget && sharedTargetId === p.deviceId && sharedConfirmed
+                      ? '0 0 0 1px var(--success), 0 0 22px rgba(70,186,120,0.22)'
+                      : usesSharedTarget && sharedTargetId === p.deviceId
+                        ? `0 0 0 1px ${roleColor}, 0 0 22px ${isKiller ? 'rgba(224,82,82,0.18)' : 'rgba(87,140,255,0.18)'}`
+                        : undefined,
+                  transform:
+                    (usesSharedTarget && sharedTargetId === p.deviceId) || (!usesSharedTarget && selected === p.deviceId)
+                      ? 'scale(1.02)'
+                      : 'scale(1)',
+                  transition: 'transform 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s',
                 }}
               >
-                <div className="player-avatar" style={{ borderColor: selected === p.deviceId ? roleColor : undefined }}>
+                <div
+                  className="player-avatar"
+                  style={{
+                    borderColor:
+                      usesSharedTarget && sharedTargetId === p.deviceId && sharedConfirmed
+                        ? 'var(--success)'
+                        : (usesSharedTarget && sharedTargetId === p.deviceId) || (!usesSharedTarget && selected === p.deviceId)
+                          ? roleColor
+                          : undefined,
+                  }}
+                >
                   {p.name[0]?.toUpperCase()}
                 </div>
                 <span className="player-name">{p.name}</span>
                 <span style={{
-                  marginLeft: 'auto', color: roleColor, fontSize: 20,
-                  opacity: selected === p.deviceId ? 1 : 0,
+                  marginLeft: 'auto',
+                  color:
+                    usesSharedTarget && sharedTargetId === p.deviceId && sharedConfirmed
+                      ? 'var(--success)'
+                      : roleColor,
+                  fontSize: 20,
+                  opacity:
+                    (usesSharedTarget && sharedTargetId === p.deviceId) || (!usesSharedTarget && selected === p.deviceId)
+                      ? 1
+                      : 0,
                   transition: 'opacity 0.15s',
                 }}>✓</span>
               </div>
@@ -396,15 +567,25 @@ function OperativeView({
       </div>
 
       <div className="page-footer">
-        <button
-          id="btn-confirmar-accion"
-          className={`btn ${isKiller ? 'btn-danger' : 'btn-primary'}`}
-          onClick={handleConfirm}
-          disabled={confirming || (!isTown && !selected)}
-          style={{ fontSize: 'var(--text-md)', padding: '16px' }}
-        >
-          {isTown ? 'Confirmar presencia →' : selected ? 'Confirmar →' : 'Seleccioná un jugador'}
-        </button>
+        {usesSharedTarget ? (
+          <div className="info-box" style={{ textAlign: 'center', borderColor: roleColor, color: roleColor }}>
+            {sharedConfirmed
+              ? 'Objetivo confirmado. Esperando al resto de la mesa.'
+              : 'La acción se ejecuta cuando todo el equipo toca el mismo objetivo.'}
+          </div>
+        ) : (
+          <button
+            id="btn-confirmar-accion"
+            className={`btn ${isKiller ? 'btn-danger' : 'btn-primary'}`}
+            onClick={() => {
+              void handleConfirm();
+            }}
+            disabled={confirming || (!isTown && !selected)}
+            style={{ fontSize: 'var(--text-md)', padding: '16px' }}
+          >
+            {isTown ? 'Confirmar presencia →' : selected ? 'Confirmar →' : 'Seleccioná un jugador'}
+          </button>
+        )}
       </div>
     </main>
   );

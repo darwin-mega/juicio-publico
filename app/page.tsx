@@ -8,6 +8,7 @@ import Image from 'next/image';
 import {
   getAudioState,
   playSound,
+  restoreMusic,
   startLobbyAmbience,
   stopAmbience,
   unlockAudio,
@@ -30,6 +31,7 @@ export default function HomePage() {
     if (hasSeenIntro) {
       setShowIntro(false);
       setPreInteraction(false);
+      restoreMusic(600);
       void startLobbyAmbience();
       return;
     }
@@ -45,6 +47,7 @@ export default function HomePage() {
     setShowIntro(false);
     setPreInteraction(false);
     sessionStorage.setItem('jp_intro_seen', 'true');
+    restoreMusic(600);
     void startLobbyAmbience({ restart: true });
   }
 
@@ -59,6 +62,7 @@ export default function HomePage() {
       videoRef.current.play().catch(() => {
         // Fallback si falla el trailer: al menos dejamos música de fondo
         console.warn('Autoplay con sonido bloqueado incluso tras clic');
+        restoreMusic(600);
         void startLobbyAmbience();
       });
     }
@@ -140,6 +144,8 @@ export default function HomePage() {
           playsInline
           preload="auto"
           muted={preInteraction || audio.muted}
+          data-audio-channel="music"
+          data-audio-locked={preInteraction ? 'true' : 'false'}
           onEnded={handleSkipIntro}
           style={{
             width: '100%',
