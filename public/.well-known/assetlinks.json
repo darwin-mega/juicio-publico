@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.mafiajuiciopublico",
+      "sha256_cert_fingerprints": [
+        "9B:04:F8:ED:42:D7:F3:1B:64:30:E4:9B:5A:FE:F6:BD:91:74:C6:75:BF:16:48:0D:9C:96:2F:B9:95:D8:DF:C4"
+      ]
+    }
+  }
+]

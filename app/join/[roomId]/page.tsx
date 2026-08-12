@@ -45,11 +45,7 @@ export default function JoinPage() {
         router.replace(`/multi/game/${roomId}`);
         return;
       }
-      if (room.status !== 'lobby') {
-        setRoomStatus('started');
-        return;
-      }
-      setRoomStatus('ok');
+      setRoomStatus(room.status === 'lobby' ? 'ok' : 'started');
     });
   }, [roomId, deviceId, router]);
 
@@ -115,7 +111,7 @@ export default function JoinPage() {
     );
   }
 
-  if (roomStatus === 'started') {
+  if (false && roomStatus === 'started') {
     return (
       <main className="page-shell" style={{ justifyContent: 'center', alignItems: 'center' }}>
         <div className="card" style={{ textAlign: 'center', padding: 'var(--sp-xl)' }}>

@@ -1,12 +1,20 @@
 // app/api/multi/room/[roomId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getOperativeProposal, getRoom, getSecret } from '@/lib/multi/redis';
+import { getOperativeProposal, getRoom, getSecret, mutateRoom } from '@/lib/multi/redis';
 import {
   deriveTeamOperativeSelection,
   getAliveTeamMemberIds,
   getCoordinatedTeamKey,
 } from '@/lib/multi/gameLogic';
-import type { OperativeProposal, PlayerOperativeAction } from '@/lib/multi/types';
+import { requireMultiSession } from '@/lib/multi/session';
+import type { MultiRoomState, OperativeProposal, PlayerOperativeAction } from '@/lib/multi/types';
+
+function sanitizeRoomPlayers(room: MultiRoomState): MultiRoomState {
+  return {
+    ...room,
+    players: room.players.map(({ accountId: _accountId, accountDisplayName: _accountDisplayName, ...player }) => player),
+  };
+}
 
 function maskPendingActions(
   pendingActions: Record<string, PlayerOperativeAction | null>,
@@ -36,24 +44,42 @@ function maskPendingActions(
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { roomId: string } }
+  { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
-    const { roomId } = params;
+    const { roomId } = await params;
     if (!roomId) {
       return NextResponse.json({ error: 'roomId requerido.' }, { status: 400 });
     }
 
-    const room = await getRoom(roomId);
+    let room = await getRoom(roomId);
     if (!room) {
       return NextResponse.json({ error: 'Sala no encontrada.' }, { status: 404 });
     }
 
-    if (!room.game) {
-      return NextResponse.json(room);
+    const requestedViewerDeviceId = req.headers.get('X-Device-Id');
+    const session = requestedViewerDeviceId
+      ? requireMultiSession(req, roomId, requestedViewerDeviceId)
+      : null;
+    const viewerDeviceId = session && !(session instanceof NextResponse)
+      ? requestedViewerDeviceId
+      : null;
+
+    if (viewerDeviceId) {
+      const touchedRoom = await mutateRoom(roomId, (currentRoom) => {
+        const player = currentRoom.players.find((p) => p.deviceId === viewerDeviceId);
+        if (player && (player.status ?? 'active') === 'active') {
+          player.lastSeenAt = Date.now();
+        }
+        return currentRoom;
+      });
+      if (touchedRoom) room = touchedRoom;
     }
 
-    const viewerDeviceId = req.headers.get('X-Device-Id');
+    if (!room.game) {
+      return NextResponse.json(sanitizeRoomPlayers(room));
+    }
+
     const secret = viewerDeviceId ? await getSecret(roomId, viewerDeviceId) : null;
 
     const sanitizedGame = {
@@ -65,9 +91,12 @@ export async function GET(
       const teamKey = getCoordinatedTeamKey(secret.role);
       if (teamKey) {
         const aliveTeamMemberIds = getAliveTeamMemberIds(secret, room.players);
-        if (aliveTeamMemberIds.length > 1) {
+        const pendingTeamMemberIds = aliveTeamMemberIds.filter((memberId) =>
+          memberId === viewerDeviceId || room.game?.pendingActions[memberId] === null
+        );
+        if (pendingTeamMemberIds.length > 1) {
           const proposals = (await Promise.all(
-            aliveTeamMemberIds.map(async (memberId) => {
+            pendingTeamMemberIds.map(async (memberId) => {
               const proposal = await getOperativeProposal(roomId, memberId);
               if (!proposal || proposal.round !== room.game?.round) {
                 return null;
@@ -87,7 +116,7 @@ export async function GET(
     }
 
     return NextResponse.json({
-      ...room,
+      ...sanitizeRoomPlayers(room),
       game: sanitizedGame,
     });
   } catch (err) {

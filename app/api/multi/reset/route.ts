@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getRoom, deleteRoom } from '@/lib/multi/redis';
+import { requireMultiSession } from '@/lib/multi/session';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,6 +13,9 @@ export async function POST(req: NextRequest) {
     if (!roomId || !deviceId) {
       return NextResponse.json({ error: 'Faltan datos.' }, { status: 400 });
     }
+
+    const session = requireMultiSession(req, roomId, deviceId, { hostOnly: true });
+    if (session instanceof NextResponse) return session;
 
     const room = await getRoom(roomId);
     if (!room) {

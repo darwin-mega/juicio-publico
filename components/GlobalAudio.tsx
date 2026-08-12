@@ -18,11 +18,13 @@ import {
   unlockAudio,
 } from '@/lib/sounds';
 import type { AmbienceKey } from '@/lib/audio/types';
+import type { MultiGamePhase } from '@/lib/multi/types';
 
 function resolveDesiredAmbience(
   pathname: string | null,
   hasActivePhase: boolean,
-  publicMultiAudioEnabled: boolean
+  publicMultiAudioEnabled: boolean,
+  multiPhase?: MultiGamePhase | null
 ): AmbienceKey | null | undefined {
   const currentPath = pathname ?? '';
 
@@ -31,11 +33,19 @@ function resolveDesiredAmbience(
   }
 
   if (currentPath.startsWith('/multi/game/')) {
-    if (!publicMultiAudioEnabled) {
+    if (!publicMultiAudioEnabled || !hasActivePhase) {
       return null;
     }
 
-    return hasActivePhase ? 'ambience.match' : null;
+    if (multiPhase === 'news') {
+      return 'ambience.news';
+    }
+
+    if (multiPhase === 'trial' || multiPhase === 'vote' || multiPhase === 'resolution') {
+      return null;
+    }
+
+    return 'ambience.match';
   }
 
   if (
@@ -48,15 +58,16 @@ function resolveDesiredAmbience(
     return 'ambience.lobby';
   }
 
-  if (
-    currentPath === '/reveal' ||
-    currentPath === '/operative' ||
-    currentPath === '/news' ||
-    currentPath === '/trial' ||
-    currentPath === '/vote' ||
-    currentPath === '/resolution'
-  ) {
+  if (currentPath === '/news') {
+    return hasActivePhase ? 'ambience.news' : null;
+  }
+
+  if (currentPath === '/reveal' || currentPath === '/operative') {
     return hasActivePhase ? 'ambience.match' : null;
+  }
+
+  if (currentPath === '/trial' || currentPath === '/vote' || currentPath === '/resolution') {
+    return null;
   }
 
   return null;
@@ -111,8 +122,8 @@ export default function GlobalAudio() {
     : gameState.phase !== 'lobby' && gameState.players.length > 0;
 
   const desiredAmbience = useMemo(
-    () => resolveDesiredAmbience(currentPath, hasActivePhase, publicMultiAudioEnabled),
-    [currentPath, hasActivePhase, publicMultiAudioEnabled]
+    () => resolveDesiredAmbience(currentPath, hasActivePhase, publicMultiAudioEnabled, room?.game?.phase ?? null),
+    [currentPath, hasActivePhase, publicMultiAudioEnabled, room?.game?.phase]
   );
 
   useEffect(() => {
@@ -143,11 +154,14 @@ export default function GlobalAudio() {
     restoreMusic(600);
 
     if (!desiredAmbience) {
-      setAmbience(null, { fadeOutMs: 250 });
+      setAmbience(null, { fadeOutMs: 700 });
       return;
     }
 
-    void setAmbience(desiredAmbience);
+    void setAmbience(
+      desiredAmbience,
+      desiredAmbience === 'ambience.news' ? { fadeInMs: 180, fadeOutMs: 700 } : undefined
+    );
   }, [desiredAmbience]);
 
   async function handleMuteToggle() {
@@ -162,8 +176,8 @@ export default function GlobalAudio() {
     <div
       style={{
         position: 'fixed',
-        top: 'var(--sp-md)',
-        right: 'var(--sp-md)',
+        top: 'max(var(--sp-md), calc(env(safe-area-inset-top) + var(--sp-sm)))',
+        right: 'max(var(--sp-md), calc(env(safe-area-inset-right) + var(--sp-md)))',
         zIndex: 10000,
         display: 'flex',
         flexDirection: 'column',

@@ -15,6 +15,11 @@ import { startGame } from '@/lib/multi/api';
 import QRCode from '@/components/QRCode';
 import { playSound, startMatchAmbience } from '@/lib/sounds';
 
+type Friend = {
+  user_id: string;
+  username: string;
+  display_name: string;
+};
 
 
 export default function MultiHostPage() {
@@ -25,6 +30,10 @@ export default function MultiHostPage() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const [inviteStatus, setInviteStatus] = useState<string | null>(null);
 
   // Iniciar polling para esta sala
   useEffect(() => {
@@ -53,6 +62,35 @@ export default function MultiHostPage() {
     } catch {
       void playSound('game.error');
     }
+  }
+
+  async function loadFriends() {
+    setFriendsOpen((current) => !current);
+    if (friends.length > 0) return;
+    const res = await fetch('/api/social/friends');
+    if (!res.ok) {
+      setInviteStatus('La capa social todavia no esta activa.');
+      return;
+    }
+    const data = await res.json();
+    setFriends(data.friends ?? []);
+  }
+
+  async function handleInviteFriends() {
+    if (selectedFriendIds.length === 0) return;
+    const res = await fetch('/api/social/room-invites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId, inviteeIds: selectedFriendIds }),
+    });
+    if (!res.ok) {
+      void playSound('game.error');
+      setInviteStatus('No se pudieron enviar invitaciones.');
+      return;
+    }
+    void playSound('ui.confirm');
+    setInviteStatus('Invitaciones guardadas. El link y QR siguen funcionando igual.');
+    setSelectedFriendIds([]);
   }
 
   async function handleStart() {

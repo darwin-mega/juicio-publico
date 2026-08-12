@@ -13,23 +13,33 @@ import type {
   ApiResponse,
   PlayerOperativeAction,
 } from './types';
+import {
+  clearPlayerCredential,
+  getPlayerCredential,
+  savePlayerCredential,
+} from './device';
 
 // Helper interno para hacer fetch con el header de deviceId
 async function apiFetch<T>(
   url: string,
-  options: RequestInit & { deviceId?: string } = {}
+  options: RequestInit & { deviceId?: string; roomId?: string } = {}
 ): Promise<ApiResponse<T>> {
-  const { deviceId, ...fetchOptions } = options;
-  
+  const { deviceId, roomId, ...fetchOptions } = options;
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(fetchOptions.headers as Record<string, string> ?? {}),
   };
-  
+
   if (deviceId) {
     headers['X-Device-Id'] = deviceId;
   }
-  
+
+  if (roomId) {
+    const credential = getPlayerCredential(roomId);
+    if (credential) headers['X-Player-Credential'] = credential;
+  }
+
   try {
     const res = await fetch(url, { ...fetchOptions, headers });
     const json = await res.json();
@@ -53,14 +63,17 @@ export interface CreateRoomPayload {
 export interface CreateRoomResult {
   roomId: string;
   room: MultiRoomState;
+  credential: string;
 }
 
 export async function createRoom(payload: CreateRoomPayload): Promise<ApiResponse<CreateRoomResult>> {
-  return apiFetch<CreateRoomResult>('/api/multi/create', {
+  const result = await apiFetch<CreateRoomResult>('/api/multi/create', {
     method: 'POST',
     body: JSON.stringify(payload),
     deviceId: payload.deviceId,
   });
+  if (result.ok) savePlayerCredential(result.data.roomId, result.data.credential);
+  return result;
 }
 
 // --- Unirse a sala ---
@@ -71,12 +84,20 @@ export interface JoinRoomPayload {
   deviceId: string;
 }
 
-export async function joinRoom(payload: JoinRoomPayload): Promise<ApiResponse<MultiRoomState>> {
-  return apiFetch<MultiRoomState>('/api/multi/join', {
+export interface JoinRoomResult {
+  room: MultiRoomState;
+  credential: string;
+}
+
+export async function joinRoom(payload: JoinRoomPayload): Promise<ApiResponse<JoinRoomResult>> {
+  const result = await apiFetch<JoinRoomResult>('/api/multi/join', {
     method: 'POST',
     body: JSON.stringify(payload),
     deviceId: payload.deviceId,
+    roomId: payload.roomId,
   });
+  if (result.ok) savePlayerCredential(payload.roomId, result.data.credential);
+  return result;
 }
 
 // --- Obtener estado de la sala (polling) ---
@@ -85,6 +106,7 @@ export async function getRoomState(roomId: string, deviceId: string): Promise<Ap
   return apiFetch<MultiRoomState>(`/api/multi/room/${roomId}`, {
     method: 'GET',
     deviceId,
+    roomId,
   });
 }
 
@@ -94,6 +116,7 @@ export async function getPlayerSecret(roomId: string, deviceId: string): Promise
   return apiFetch<PlayerSecret | null>(`/api/multi/secret/${roomId}`, {
     method: 'GET',
     deviceId,
+    roomId,
   });
 }
 
@@ -109,6 +132,7 @@ export async function startGame(payload: StartGamePayload): Promise<ApiResponse<
     method: 'POST',
     body: JSON.stringify(payload),
     deviceId: payload.deviceId,
+    roomId: payload.roomId,
   });
 }
 
@@ -117,6 +141,7 @@ export async function restartGame(payload: StartGamePayload): Promise<ApiRespons
     method: 'POST',
     body: JSON.stringify(payload),
     deviceId: payload.deviceId,
+    roomId: payload.roomId,
   });
 }
 
@@ -127,6 +152,7 @@ export async function confirmReveal(roomId: string, deviceId: string): Promise<A
     method: 'POST',
     body: JSON.stringify({ roomId }),
     deviceId,
+    roomId,
   });
 }
 
@@ -143,6 +169,7 @@ export async function submitOperativeAction(payload: SubmitActionPayload): Promi
     method: 'POST',
     body: JSON.stringify(payload),
     deviceId: payload.deviceId,
+    roomId: payload.roomId,
   });
 }
 
@@ -159,6 +186,7 @@ export async function castVote(payload: CastVotePayload): Promise<ApiResponse<vo
     method: 'POST',
     body: JSON.stringify(payload),
     deviceId: payload.deviceId,
+    roomId: payload.roomId,
   });
 }
 
@@ -174,15 +202,39 @@ export async function advancePhase(payload: AdvancePhasePayload): Promise<ApiRes
     method: 'POST',
     body: JSON.stringify(payload),
     deviceId: payload.deviceId,
+    roomId: payload.roomId,
+  });
+}
+
+export interface ControlPlayerPayload {
+  roomId: string;
+  deviceId: string;
+  targetDeviceId: string;
+  action: 'omit' | 'kick';
+}
+
+export async function controlPlayer(payload: ControlPlayerPayload): Promise<ApiResponse<MultiRoomState>> {
+  return apiFetch<MultiRoomState>('/api/multi/player-control', {
+    method: 'POST',
+    body: JSON.stringify({
+      roomId: payload.roomId,
+      targetDeviceId: payload.targetDeviceId,
+      action: payload.action,
+    }),
+    deviceId: payload.deviceId,
+    roomId: payload.roomId,
   });
 }
 
 // --- Expulsar sala (host) ---
 
 export async function resetRoom(roomId: string, deviceId: string): Promise<ApiResponse<void>> {
-  return apiFetch<void>('/api/multi/reset', {
+  const result = await apiFetch<void>('/api/multi/reset', {
     method: 'POST',
     body: JSON.stringify({ roomId }),
     deviceId,
+    roomId,
   });
+  if (result.ok) clearPlayerCredential(roomId);
+  return result;
 }

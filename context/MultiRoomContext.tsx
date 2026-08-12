@@ -32,24 +32,24 @@ import type {
 interface MultiRoomContextValue {
   // Identidad del dispositivo actual
   deviceId: DeviceId;
-  
+
   // Estado de la sala (actualizado por polling)
   room: MultiRoomState | null;
   // Secreto del jugador actual (solo disponible cuando la partida inicia)
   secret: PlayerSecret | null;
-  
+
   // Estados de carga/error
   loading: boolean;
   error: string | null;
-  
+
   // Inicializar el polling para una sala específica
   joinRoom: (roomId: string) => void;
   // Detener el polling
   leaveRoom: () => void;
-  
+
   // Forzar un refresco inmediato del estado
   refresh: () => Promise<void>;
-  
+
   // Valores calculados
   isHost: boolean;
   myPlayer: MultiRoomState['players'][number] | null;
@@ -71,7 +71,7 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
   const [secret, setSecret] = useState<PlayerSecret | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isFetchingRef = useRef(false);
 
@@ -148,13 +148,13 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
   // Valores calculados
   const myPlayer = room?.players.find((p) => p.deviceId === deviceId) ?? null;
   const isHost = room?.hostId === deviceId;
-  
+
   const hasActed = room?.game
     ? room.game.pendingActions[deviceId] != null
     : false;
 
   const hasVoted = room?.game
-    ? room.game.votes[deviceId] !== undefined
+    ? room.game.votes[deviceId] !== undefined || room.game.skippedVotes?.[deviceId] !== undefined
     : false;
 
   return (

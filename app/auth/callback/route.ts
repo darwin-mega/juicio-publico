@@ -1,0 +1,40 @@
+import { createClient, hasSupabaseConfig } from '@/lib/supabase/server'
+import { ensureSocialProfile } from '@/lib/social/store'
+import { NextResponse } from 'next/server'
+
+export async function GET(request: Request) {
+  const { searchParams, origin } = new URL(request.url)
+  const code = searchParams.get('code')
+  // if "next" is in param, use it as the redirect URL
+  const next = searchParams.get('next') ?? '/'
+
+  if (!hasSupabaseConfig()) {
+    return NextResponse.redirect(`${origin}/login?error=missing-config`)
+  }
+
+  if (code) {
+    const supabase = await createClient()
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error) {
+      try {
+        await ensureSocialProfile()
+      } catch (profileError) {
+        console.warn('[auth/callback] No se pudo inicializar perfil social', profileError)
+      }
+
+      const forwardedHost = request.headers.get('x-forwarded-host') // original origin before load balancer
+      const isLocalEnv = process.env.NODE_ENV === 'development'
+      if (isLocalEnv) {
+        // We can be sure that there is no load balancer in between, so no need to watch for X-Forwarded-Host
+        return NextResponse.redirect(`${origin}${next}`)
+      } else if (forwardedHost) {
+        return NextResponse.redirect(`https://${forwardedHost}${next}`)
+      } else {
+        return NextResponse.redirect(`${origin}${next}`)
+      }
+    }
+  }
+
+  // return the user to an error page with instructions
+  return NextResponse.redirect(`${origin}/auth/auth-code-error`)
+}

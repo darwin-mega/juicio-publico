@@ -67,7 +67,7 @@ export function resolveOperative(
   let victimRole: Role | null = null;
   let saved = false;
 
-  let updatedPlayers = players.map((p) => ({ ...p }));
+  const updatedPlayers = players.map((p) => ({ ...p }));
 
   if (killTargetId) {
     const targetPlayer = updatedPlayers.find((p) => p.id === killTargetId);

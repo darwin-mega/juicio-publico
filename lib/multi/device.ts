@@ -9,6 +9,7 @@
 // ============================================================
 
 const DEVICE_ID_KEY = 'juicio-multi-device-id';
+const PLAYER_CREDENTIAL_PREFIX = 'juicio-multi-player-credential:';
 
 /**
  * Genera un UUID v4 simple sin dependencias externas.
@@ -32,10 +33,10 @@ function generateUUID(): string {
  */
 export function getOrCreateDeviceId(): string {
   if (typeof window === 'undefined') return '';
-  
+
   const stored = localStorage.getItem(DEVICE_ID_KEY);
   if (stored) return stored;
-  
+
   const newId = generateUUID();
   localStorage.setItem(DEVICE_ID_KEY, newId);
   return newId;
@@ -47,6 +48,21 @@ export function getOrCreateDeviceId(): string {
 export function getDeviceId(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem(DEVICE_ID_KEY);
+}
+
+export function savePlayerCredential(roomId: string, credential: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(`${PLAYER_CREDENTIAL_PREFIX}${roomId.toUpperCase()}`, credential);
+}
+
+export function getPlayerCredential(roomId: string): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(`${PLAYER_CREDENTIAL_PREFIX}${roomId.toUpperCase()}`);
+}
+
+export function clearPlayerCredential(roomId: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(`${PLAYER_CREDENTIAL_PREFIX}${roomId.toUpperCase()}`);
 }
 
 const LAST_ROOM_KEY = 'juicio-multi-last-room';

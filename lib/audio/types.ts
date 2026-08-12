@@ -1,6 +1,6 @@
 import type { Role } from '@/lib/game/state';
 
-export type AmbienceKey = 'ambience.lobby' | 'ambience.match';
+export type AmbienceKey = 'ambience.lobby' | 'ambience.match' | 'ambience.news';
 
 export type UiSoundKey =
   | 'ui.click'
