@@ -20,6 +20,20 @@ import type {
 import type { Role, RoundReport } from '@/lib/game/state';
 import { assignRoles, buildPlayer, checkWinConditionByCounts } from '@/lib/game/rules';
 
+export const PLAYER_DISCONNECTED_AFTER_MS = 15_000;
+
+export function isPlayerActive(player: Pick<MultiPlayer, 'status'>): boolean {
+  return (player.status ?? 'active') === 'active';
+}
+
+export function isPlayerActiveAlive(player: Pick<MultiPlayer, 'status' | 'isAlive'>): boolean {
+  return isPlayerActive(player) && player.isAlive;
+}
+
+export function isPlayerConnected(player: Pick<MultiPlayer, 'joinedAt' | 'lastSeenAt'>, now = Date.now()): boolean {
+  return now - (player.lastSeenAt ?? player.joinedAt) <= PLAYER_DISCONNECTED_AFTER_MS;
+}
+
 // --- Asignación de roles en modo multi ---
 
 /**
@@ -71,7 +85,7 @@ export function assignMultiRoles(
 
 export function createInitialGameState(players: MultiPlayer[]): MultiGameState {
   const pendingActions: Record<DeviceId, PlayerOperativeAction | null> = {};
-  for (const p of players.filter((p) => p.isAlive)) {
+  for (const p of players.filter(isPlayerActiveAlive)) {
     pendingActions[p.deviceId] = null;
   }
 
@@ -80,7 +94,10 @@ export function createInitialGameState(players: MultiPlayer[]): MultiGameState {
     round: 1,
     pendingActions,
     votes: {},
+    skippedVotes: {},
     reports: [],
+    progressEvents: [],
+    progressAppliedAt: null,
     winnerFaction: null,
     isOver: false,
     trialStartedAt: null,
@@ -97,7 +114,7 @@ export function getAliveTeamMemberIds(
   secret: PlayerSecret,
   players: MultiPlayer[]
 ): DeviceId[] {
-  const aliveIds = new Set(players.filter((p) => p.isAlive).map((p) => p.deviceId));
+  const aliveIds = new Set(players.filter(isPlayerActiveAlive).map((p) => p.deviceId));
   return [secret.deviceId, ...secret.teammateIds].filter((deviceId) => aliveIds.has(deviceId));
 }
 
@@ -148,7 +165,7 @@ export function isTeamSelectionConfirmed(
  * Determina si todos los jugadores vivos enviaron su acción.
  */
 export function allActionsSubmitted(game: MultiGameState, players: MultiPlayer[]): boolean {
-  const alivePlayers = players.filter((p) => p.isAlive);
+  const alivePlayers = players.filter(isPlayerActiveAlive);
   return alivePlayers.every((p) => game.pendingActions[p.deviceId] !== null);
 }
 
@@ -238,7 +255,10 @@ export function resolveMultiVote(
   expelledWasKiller: boolean | null;
 } {
   const tally: Record<string, number> = {};
-  Object.values(votes).forEach((targetId) => {
+  const activeAliveIds = new Set(players.filter(isPlayerActiveAlive).map((p) => p.deviceId));
+
+  Object.entries(votes).forEach(([voterId, targetId]) => {
+    if (!activeAliveIds.has(voterId) || !activeAliveIds.has(targetId)) return;
     tally[targetId] = (tally[targetId] || 0) + 1;
   });
 
@@ -281,7 +301,7 @@ export function checkMultiWinCondition(
   secrets: Record<DeviceId, PlayerSecret>,
   initialKillers: number
 ): 'killers' | 'town' | null {
-  const alive = players.filter((p) => p.isAlive);
+  const alive = players.filter(isPlayerActiveAlive);
   const aliveKillers = alive.filter((p) => secrets[p.deviceId]?.role === 'killer').length;
   const aliveTown    = alive.filter((p) => secrets[p.deviceId]?.role !== 'killer').length;
   const aliveSpecial = alive.filter((p) => {
@@ -315,7 +335,7 @@ export function resetPendingActions(
   players: MultiPlayer[]
 ): Record<DeviceId, PlayerOperativeAction | null> {
   const result: Record<DeviceId, PlayerOperativeAction | null> = {};
-  for (const p of players.filter((p) => p.isAlive)) {
+  for (const p of players.filter(isPlayerActiveAlive)) {
     result[p.deviceId] = null;
   }
   return result;

@@ -338,3 +338,17 @@ export async function deleteRoomData(room: MultiRoomState): Promise<void> {
     keys.forEach(memDel);
   }
 }
+
+export async function mutateRoom<T>(
+  roomId: RoomId,
+  mutator: (room: MultiRoomState) => Promise<T> | T
+): Promise<T | null> {
+  return withRoomLock(roomId, async () => {
+    const room = await getRoom(roomId);
+    if (!room) return null;
+
+    const result = await mutator(room);
+    await saveRoom(room);
+    return result;
+  });
+}

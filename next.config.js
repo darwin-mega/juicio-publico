@@ -23,10 +23,10 @@ const nextConfig = {
             "default-src 'self'",
             "script-src 'self' 'unsafe-inline'",
             "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' blob: data:",
+            "img-src 'self' blob: data: https://*.googleusercontent.com https://*.supabase.co",
             "media-src 'self' blob:",
             "font-src 'self'",
-            "connect-src 'self'",
+            "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",
@@ -53,3 +53,5 @@ const nextConfig = {
 };
 
 module.exports = nextConfig;
+
+

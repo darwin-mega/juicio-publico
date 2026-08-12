@@ -7,6 +7,7 @@ import { voteSchema } from '@/lib/multi/validation';
 import { parseJsonBody } from '@/lib/multi/request';
 import { enforceRateLimit } from '@/lib/multi/rateLimit';
 import { routeError } from '@/lib/multi/errors';
+import { applyProgressIfGameOver, buildVoteProgressEvents } from '@/lib/multi/progression';
 
 export async function POST(req: NextRequest) {
   try {
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
         const voteResult = resolveMultiVote(room.players, updatedVotes, secrets);
         updatedPlayers = voteResult.updatedPlayers;
         const winner = checkMultiWinCondition(updatedPlayers, secrets, room.config.killerCount);
+        const progressEvents = buildVoteProgressEvents(room.game.round, updatedVotes, secrets);
         const lastReport = room.game.reports[room.game.reports.length - 1];
         const updatedReports = lastReport
           ? [
@@ -74,6 +76,7 @@ export async function POST(req: NextRequest) {
           phase: 'resolution',
           votes: updatedVotes,
           reports: updatedReports,
+          progressEvents: [...(room.game.progressEvents ?? []), ...progressEvents],
           winnerFaction: winner,
           isOver: winner !== null,
         };
@@ -85,6 +88,14 @@ export async function POST(req: NextRequest) {
         game: updatedGame,
         updatedAt: Date.now(),
       };
+      if (allVoted) {
+        const secrets: Record<string, PlayerSecret> = {};
+        for (const player of room.players) {
+          const secret = await getSecret(roomId, player.deviceId);
+          if (secret) secrets[player.deviceId] = secret;
+        }
+        await applyProgressIfGameOver(updatedRoom, secrets);
+      }
       await saveRoom(updatedRoom);
       return NextResponse.json({ ok: true });
     });

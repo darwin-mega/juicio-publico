@@ -18,9 +18,11 @@ import {
   confirmReveal,
   submitOperativeAction,
   castVote,
+  controlPlayer,
   advancePhase,
   restartGame,
 } from '@/lib/multi/api';
+import { PLAYER_DISCONNECTED_AFTER_MS } from '@/lib/multi/gameLogic';
 import {
   ROLE_LABELS,
 } from '@/lib/game/state';
@@ -34,6 +36,14 @@ import type {
   MultiPlayer,
   PlayerSecret,
 } from '@/lib/multi/types';
+
+function isActivePlayer(player: MultiPlayer) {
+  return (player.status ?? 'active') === 'active';
+}
+
+function isConnectedPlayer(player: MultiPlayer) {
+  return Date.now() - (player.lastSeenAt ?? player.joinedAt) <= PLAYER_DISCONNECTED_AFTER_MS;
+}
 
 // =============================================================
 // Sub-vista: Sala de espera (antes de que el host inicie)
@@ -110,18 +120,108 @@ function WaitingView({
 // =============================================================
 // Sub-vista: Revelación de rol
 // =============================================================
+function HostPlayerControls({
+  room,
+  deviceId,
+  isHost,
+  controllingPlayerId,
+  onControl,
+}: {
+  room: MultiRoomState;
+  deviceId: string;
+  isHost: boolean;
+  controllingPlayerId: string | null;
+  onControl: (targetDeviceId: string, action: 'omit' | 'kick') => Promise<void>;
+}) {
+  if (!isHost || !room.game || room.game.isOver) return null;
+  if (!['reveal', 'operative', 'vote'].includes(room.game.phase)) return null;
+
+  function needsResponse(player: MultiPlayer) {
+    if (!room.game || !player.isAlive || !isActivePlayer(player)) return false;
+    if (room.game.phase === 'reveal') return !player.readyForOperative;
+    if (room.game.phase === 'operative') return room.game.pendingActions[player.deviceId] === null;
+    if (room.game.phase === 'vote') {
+      return room.game.votes[player.deviceId] === undefined &&
+        room.game.skippedVotes?.[player.deviceId] === undefined;
+    }
+    return false;
+  }
+
+  return (
+    <div className="card" style={{ padding: 'var(--sp-md)', display: 'grid', gap: 'var(--sp-sm)' }}>
+      <div>
+        <strong>Control del host</strong>
+        <p className="text-muted" style={{ fontSize: 'var(--text-xs)', marginTop: 4 }}>
+          Si alguien no responde, podés omitirlo en esta fase o sacarlo de la partida.
+        </p>
+      </div>
+
+      {room.players.map((player) => {
+        const active = isActivePlayer(player);
+        const connected = isConnectedPlayer(player);
+        const pending = needsResponse(player);
+        const busy = controllingPlayerId === player.deviceId;
+
+        return (
+          <div key={player.deviceId} className="card-section" style={{ display: 'grid', gap: 'var(--sp-xs)' }}>
+            <div className="flex justify-between">
+              <span>{player.name}{player.deviceId === deviceId ? ' (host)' : ''}</span>
+              <span
+                className="text-muted"
+                style={{
+                  color: !active ? 'var(--danger)' : connected ? 'var(--success)' : 'var(--warning)',
+                  fontSize: 'var(--text-xs)',
+                }}
+              >
+                {!active ? 'Fuera' : connected ? 'Conectado' : 'Desconectado'}
+              </span>
+            </div>
+
+            {active && pending && (
+              <div style={{ display: 'grid', gridTemplateColumns: player.deviceId === deviceId ? '1fr' : '1fr 1fr', gap: 'var(--sp-xs)' }}>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={busy}
+                  onClick={() => onControl(player.deviceId, 'omit')}
+                >
+                  {busy ? 'Aplicando...' : 'Omitir'}
+                </button>
+                {player.deviceId !== deviceId && (
+                  <button
+                    className="btn btn-danger btn-sm"
+                    disabled={busy}
+                    onClick={() => onControl(player.deviceId, 'kick')}
+                  >
+                    Expulsar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function RevealView({
   me,
   secret,
   room,
   onReady,
   isReady,
+  isHost,
+  controllingPlayerId,
+  onControl,
 }: {
   me: MultiPlayer;
   secret: PlayerSecret | null;
   room: MultiRoomState;
   onReady: () => void;
   isReady: boolean;
+  isHost: boolean;
+  controllingPlayerId: string | null;
+  onControl: (targetDeviceId: string, action: 'omit' | 'kick') => Promise<void>;
 }) {
   useEffect(() => {
     if (!secret) return;
@@ -147,8 +247,8 @@ function RevealView({
   const teammates = room.players.filter((p) => secret.teammateIds.includes(p.deviceId));
 
   // Cuántos jugadores ya confirmaron estar listos
-  const readyCount = room.players.filter((p) => p.isAlive && p.readyForOperative).length;
-  const totalAlive = room.players.filter((p) => p.isAlive).length;
+  const readyCount = room.players.filter((p) => p.isAlive && isActivePlayer(p) && p.readyForOperative).length;
+  const totalAlive = room.players.filter((p) => p.isAlive && isActivePlayer(p)).length;
 
   return (
     <main className="page-shell">
@@ -218,6 +318,14 @@ function RevealView({
             ✅ Listo — {readyCount}/{totalAlive} jugadores confirmaron su rol
           </div>
         )}
+
+        <HostPlayerControls
+          room={room}
+          deviceId={me.deviceId}
+          isHost={isHost}
+          controllingPlayerId={controllingPlayerId}
+          onControl={onControl}
+        />
       </div>
 
       <div className="page-footer">
@@ -247,19 +355,25 @@ function OperativeView({
   deviceId,
   hasActed,
   onAction,
+  isHost,
+  controllingPlayerId,
+  onControl,
 }: {
   secret: PlayerSecret;
   room: MultiRoomState;
   deviceId: string;
   hasActed: boolean;
   onAction: (type: 'kill' | 'save' | 'inspect' | 'neutral', targetId: string | null) => Promise<void>;
+  isHost: boolean;
+  controllingPlayerId: string | null;
+  onControl: (targetDeviceId: string, action: 'omit' | 'kick') => Promise<void>;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [syncingTargetId, setSyncingTargetId] = useState<string | null>(null);
   const autoCommitSharedTargetRef = useRef<string | null>(null);
 
-  const alivePlayers = room.players.filter((p) => p.isAlive);
+  const alivePlayers = room.players.filter((p) => p.isAlive && isActivePlayer(p));
   const pendingCount = Object.values(room.game?.pendingActions ?? {}).filter((v) => v === null).length;
 
   const roleColor = ROLE_COLORS[secret.role];
@@ -273,7 +387,8 @@ function OperativeView({
         ? 'rgba(76,182,124,0.10)'
         : 'rgba(255,255,255,0.04)';
   const aliveTeamMemberIds = [deviceId, ...secret.teammateIds].filter((memberId) =>
-    alivePlayers.some((player) => player.deviceId === memberId)
+    alivePlayers.some((player) => player.deviceId === memberId) &&
+    (memberId === deviceId || room.game?.pendingActions[memberId] === null)
   );
   const teamKey = secret.role === 'killer'
     ? 'killers'
@@ -429,6 +544,13 @@ function OperativeView({
               jugadores que restan
             </div>
           </div>
+          <HostPlayerControls
+            room={room}
+            deviceId={deviceId}
+            isHost={isHost}
+            controllingPlayerId={controllingPlayerId}
+            onControl={onControl}
+          />
         </div>
       </main>
     );
@@ -561,6 +683,14 @@ function OperativeView({
             </button>
           ))}
         </div>
+
+        <HostPlayerControls
+          room={room}
+          deviceId={deviceId}
+          isHost={isHost}
+          controllingPlayerId={controllingPlayerId}
+          onControl={onControl}
+        />
       </div>
 
       <div className="page-footer">
@@ -595,7 +725,7 @@ import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
 import {
   playNewsJingle, playDeath, playSaved, playCalm,
   playAccusation, playInnocent, playTransition,
-  startBackgroundMusic, playVictory, playDefeat, playExpelled,
+  stopBackgroundMusic, playVictory, playDefeat, playExpelled,
   duckMusic, playRoleSound, playSound, restoreMusic,
 } from '@/lib/sounds';
 
@@ -786,10 +916,12 @@ function NewsView({
         <div className="page-footer anim-slide-up">
           {isHost ? (
             <button className="btn btn-primary" onClick={() => { playTransition(); restoreMusic(900); onAdvance(); }} disabled={advancing}>
-              {advancing ? 'Avanzando...' : '⚖️ Ir al Juicio Público →'}
+              {advancing ? 'Avanzando...' : room.game?.isOver ? 'Ver resultado final →' : '⚖️ Ir al Juicio Público →'}
             </button>
           ) : (
-            <div className="info-box" style={{ textAlign: 'center' }}>Esperando que el host inicie el debate.</div>
+            <div className="info-box" style={{ textAlign: 'center' }}>
+              {room.game?.isOver ? 'Esperando que el host muestre el resultado final.' : 'Esperando que el host inicie el debate.'}
+            </div>
           )}
         </div>
       )}
@@ -820,8 +952,8 @@ function TrialView({
       return;
     }
 
-    // Al entrar al juicio, el host mantiene la base pública de tensión.
-    startBackgroundMusic();
+    // En juicio priorizamos el debate en vivo: silencio musical.
+    stopBackgroundMusic({ fadeOutMs: 900 });
   }, [isHost]);
 
   useEffect(() => {
@@ -947,6 +1079,8 @@ function VoteView({
   isHost,
   hasVoted,
   onVote,
+  controllingPlayerId,
+  onControl,
 }: {
   me: MultiPlayer;
   room: MultiRoomState;
@@ -954,13 +1088,15 @@ function VoteView({
   isHost: boolean;
   hasVoted: boolean;
   onVote: (targetId: string) => void;
+  controllingPlayerId: string | null;
+  onControl: (targetDeviceId: string, action: 'omit' | 'kick') => Promise<void>;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const alivePlayers = room.players.filter((p) => p.isAlive && p.deviceId !== deviceId);
-  const votedCount = Object.keys(room.game?.votes ?? {}).length;
-  const totalVoters = room.players.filter((p) => p.isAlive).length;
+  const alivePlayers = room.players.filter((p) => p.isAlive && isActivePlayer(p) && p.deviceId !== deviceId);
+  const votedCount = Object.keys(room.game?.votes ?? {}).length + Object.keys(room.game?.skippedVotes ?? {}).length;
+  const totalVoters = room.players.filter((p) => p.isAlive && isActivePlayer(p)).length;
 
   useEffect(() => {
     if (!isHost) {
@@ -1003,7 +1139,9 @@ function VoteView({
 
   if (hasVoted) {
     const myTarget = room.game?.votes[deviceId];
-    const targetName = room.players.find((p) => p.deviceId === myTarget)?.name ?? '?';
+    const targetName = myTarget
+      ? room.players.find((p) => p.deviceId === myTarget)?.name ?? '?'
+      : 'omitido por el host';
 
     return (
       <main className="page-shell" style={{ justifyContent: 'center', alignItems: 'center' }}>
@@ -1023,6 +1161,13 @@ function VoteView({
               votos emitidos
             </div>
           </div>
+          <HostPlayerControls
+            room={room}
+            deviceId={deviceId}
+            isHost={isHost}
+            controllingPlayerId={controllingPlayerId}
+            onControl={onControl}
+          />
         </div>
       </main>
     );
@@ -1076,6 +1221,14 @@ function VoteView({
             </button>
           ))}
         </div>
+
+        <HostPlayerControls
+          room={room}
+          deviceId={deviceId}
+          isHost={isHost}
+          controllingPlayerId={controllingPlayerId}
+          onControl={onControl}
+        />
       </div>
 
       <div className="page-footer">
@@ -1121,8 +1274,8 @@ function ResolutionView({
       return;
     }
 
-    // 1. Al entrar a la resolución, el host retoma la mezcla pública.
-    startBackgroundMusic();
+    // 1. Mantener resolución con impacto corto, sin cama musical sostenida.
+    stopBackgroundMusic({ fadeOutMs: 500 });
     duckMusic(0.05, 220);
 
     // 2. Disparar sonidos de veredicto
@@ -1303,6 +1456,7 @@ export default function MultiGamePage() {
   const [optimisticRevealRound, setOptimisticRevealRound] = useState<number | null>(null);
   const [advancing, setAdvancing] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [controllingPlayerId, setControllingPlayerId] = useState<string | null>(null);
 
   // Iniciar polling para esta sala
   useEffect(() => {
@@ -1363,6 +1517,17 @@ export default function MultiGamePage() {
     await refresh();
   }
 
+  async function handlePlayerControl(targetDeviceId: string, action: 'omit' | 'kick') {
+    if (!isHost) return;
+    setControllingPlayerId(targetDeviceId);
+    const result = await controlPlayer({ roomId, deviceId, credential, targetDeviceId, action });
+    if (!result.ok) {
+      void playSound('game.error');
+    }
+    await refresh();
+    setControllingPlayerId(null);
+  }
+
   async function handleAdvance() {
     setAdvancing(true);
     await advancePhase({ roomId, deviceId, credential });
@@ -1398,12 +1563,27 @@ export default function MultiGamePage() {
         room={room}
         onReady={handleRevealReady}
         isReady={revealDone}
+        isHost={isHost}
+        controllingPlayerId={controllingPlayerId}
+        onControl={handlePlayerControl}
       />
     );
   }
 
   if (phase === 'operative') {
     if (!secret) return null;
+    if (!myPlayer?.isAlive || !isActivePlayer(myPlayer)) {
+      return (
+        <main className="page-shell" style={{ justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+          <div className="card" style={{ padding: 'var(--sp-xl)' }}>
+            <h3>Fuera de esta ronda</h3>
+            <p className="text-muted" style={{ marginTop: 8 }}>
+              Esperá a que el host avance la partida.
+            </p>
+          </div>
+        </main>
+      );
+    }
     return (
       <OperativeView
         secret={secret}
@@ -1411,6 +1591,9 @@ export default function MultiGamePage() {
         deviceId={deviceId}
         hasActed={hasActed}
         onAction={handleAction}
+        isHost={isHost}
+        controllingPlayerId={controllingPlayerId}
+        onControl={handlePlayerControl}
       />
     );
   }
@@ -1446,6 +1629,8 @@ export default function MultiGamePage() {
         isHost={isHost}
         hasVoted={hasVoted}
         onVote={handleVote}
+        controllingPlayerId={controllingPlayerId}
+        onControl={handlePlayerControl}
       />
     );
   }

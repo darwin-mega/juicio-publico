@@ -23,6 +23,7 @@ import { submitActionSchema } from '@/lib/multi/validation';
 import { parseJsonBody } from '@/lib/multi/request';
 import { enforceRateLimit } from '@/lib/multi/rateLimit';
 import { routeError } from '@/lib/multi/errors';
+import { applyProgressIfGameOver, buildOperativeProgressEvents } from '@/lib/multi/progression';
 
 export async function POST(req: NextRequest) {
   try {
@@ -142,6 +143,26 @@ export async function POST(req: NextRequest) {
         );
         const winner = operativeResult.winnerFaction
           ?? checkMultiWinCondition(operativeResult.updatedPlayers, secrets, room.config.killerCount);
+        const killedTargetId = Object.entries(updatedPendingActions).find(([, currentAction]) =>
+          currentAction?.type === 'kill' &&
+          currentAction.targetId &&
+          room.players.find((candidate) => candidate.deviceId === currentAction.targetId)?.isAlive &&
+          !operativeResult.updatedPlayers.find((candidate) => candidate.deviceId === currentAction.targetId)?.isAlive
+        )?.[1]?.targetId ?? null;
+        const savedTargetId = Object.entries(updatedPendingActions).find(([, currentAction]) =>
+          currentAction?.type === 'save' &&
+          currentAction.targetId &&
+          Object.values(updatedPendingActions).some((candidateAction) =>
+            candidateAction?.type === 'kill' && candidateAction.targetId === currentAction.targetId
+          )
+        )?.[1]?.targetId ?? null;
+        const progressEvents = buildOperativeProgressEvents(
+          room.game.round,
+          updatedPendingActions,
+          secrets,
+          killedTargetId,
+          savedTargetId
+        );
         updatedRoom = {
           ...updatedRoom,
           players: operativeResult.updatedPlayers,
@@ -150,11 +171,13 @@ export async function POST(req: NextRequest) {
             phase: 'news',
             pendingActions: resetPendingActions(operativeResult.updatedPlayers),
             reports: [...room.game.reports, operativeResult.report],
+            progressEvents: [...(room.game.progressEvents ?? []), ...progressEvents],
             winnerFaction: winner,
             isOver: winner !== null,
           },
           updatedAt: Date.now(),
         };
+        await applyProgressIfGameOver(updatedRoom, secrets);
       }
 
       await saveRoom(updatedRoom);

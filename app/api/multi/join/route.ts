@@ -6,6 +6,7 @@ import { isMatchingDeviceHeader, joinRoomSchema } from '@/lib/multi/validation';
 import { parseJsonBody } from '@/lib/multi/request';
 import { enforceRateLimit } from '@/lib/multi/rateLimit';
 import { routeError } from '@/lib/multi/errors';
+import { getOptionalAccountIdentity } from '@/lib/multi/account';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest) {
     }
     const limited = await enforceRateLimit(req, 'join', roomId);
     if (limited) return limited;
+    const { accountId, accountDisplayName } = await getOptionalAccountIdentity();
 
     return withRoomLock(roomId, async () => {
       const room = await getRoom(roomId);
@@ -29,7 +31,19 @@ export async function POST(req: NextRequest) {
         if (!(await authenticatePlayer(req, roomId, room))) {
           return NextResponse.json({ error: 'Credencial de reconexión inválida.' }, { status: 401 });
         }
-        return NextResponse.json({ room, credential: req.headers.get('X-Player-Credential') });
+        const updatedRoom = {
+          ...room,
+          players: room.players.map((player) => player.deviceId === deviceId ? {
+            ...player,
+            accountId: player.accountId ?? accountId,
+            accountDisplayName: accountDisplayName ?? player.accountDisplayName,
+            lastSeenAt: Date.now(),
+            status: player.status ?? 'active',
+          } : player),
+          updatedAt: Date.now(),
+        };
+        await saveRoom(updatedRoom);
+        return NextResponse.json({ room: updatedRoom, credential: req.headers.get('X-Player-Credential') });
       }
 
       if (room.status !== 'lobby') {
@@ -38,14 +52,21 @@ export async function POST(req: NextRequest) {
       if (room.players.length >= 20) {
         return NextResponse.json({ error: 'La sala alcanzó el máximo de 20 jugadores.' }, { status: 409 });
       }
+      if (accountId && room.players.some((player) => player.accountId === accountId)) {
+        return NextResponse.json({ error: 'Esta cuenta ya está dentro de la sala.' }, { status: 409 });
+      }
       if (room.players.some((player) => player.name.toLocaleLowerCase('es') === name.toLocaleLowerCase('es'))) {
         return NextResponse.json({ error: 'Ese nombre ya está en uso en esta sala.' }, { status: 409 });
       }
 
       const newPlayer: MultiPlayer = {
         deviceId,
+        accountId,
+        accountDisplayName,
         name,
         joinedAt: Date.now(),
+        lastSeenAt: Date.now(),
+        status: 'active',
         isAlive: true,
         isRevealed: false,
         readyForOperative: false,

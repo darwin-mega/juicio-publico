@@ -3,13 +3,14 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
-type RateLimitScope = 'create' | 'join' | 'command' | 'poll';
+type RateLimitScope = 'create' | 'join' | 'command' | 'poll' | 'social';
 
 const LIMITS: Record<RateLimitScope, { requests: number; window: `${number} ${'s' | 'm' | 'h'}` }> = {
   create: { requests: 10, window: '10 m' },
   join: { requests: 30, window: '10 m' },
   command: { requests: 120, window: '1 m' },
   poll: { requests: 180, window: '1 m' },
+  social: { requests: 30, window: '1 m' },
 };
 
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;

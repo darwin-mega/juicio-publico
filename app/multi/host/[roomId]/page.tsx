@@ -12,9 +12,15 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useMultiRoom } from '@/context/MultiRoomContext';
 import { startGame } from '@/lib/multi/api';
+import { PLAYER_DISCONNECTED_AFTER_MS } from '@/lib/multi/gameLogic';
 import QRCode from '@/components/QRCode';
 import { playSound, startMatchAmbience } from '@/lib/sounds';
 
+type Friend = {
+  user_id: string;
+  username: string;
+  display_name: string;
+};
 
 
 export default function MultiHostPage() {
@@ -25,6 +31,16 @@ export default function MultiHostPage() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState<number | null>(null);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setCurrentTime(Date.now()), 5_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   // Iniciar polling para esta sala
   useEffect(() => {
@@ -53,6 +69,39 @@ export default function MultiHostPage() {
     } catch {
       void playSound('game.error');
     }
+  }
+
+  async function loadFriends() {
+    setFriendsOpen((current) => !current);
+    if (friends.length > 0) return;
+    const res = await fetch('/api/social/friends');
+    if (!res.ok) {
+      setInviteStatus('La capa social todavia no esta activa.');
+      return;
+    }
+    const data = await res.json();
+    setFriends(data.friends ?? []);
+  }
+
+  async function handleInviteFriends() {
+    if (selectedFriendIds.length === 0) return;
+    const res = await fetch('/api/social/room-invites', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Device-Id': deviceId,
+        'X-Player-Credential': credential,
+      },
+      body: JSON.stringify({ roomId, inviteeIds: selectedFriendIds }),
+    });
+    if (!res.ok) {
+      void playSound('game.error');
+      setInviteStatus('No se pudieron enviar invitaciones.');
+      return;
+    }
+    void playSound('ui.confirm');
+    setInviteStatus('Invitaciones guardadas. El link y QR siguen funcionando igual.');
+    setSelectedFriendIds([]);
   }
 
   async function handleStart() {
@@ -138,10 +187,51 @@ export default function MultiHostPage() {
             {copied ? '✅ Enlace copiado' : '🔗 Copiar enlace de invitación'}
           </button>
 
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: 'var(--text-sm)' }}
+            onClick={loadFriends}
+          >
+            Invitar amigos
+          </button>
+
           <div className="info-box" style={{ fontSize: 'var(--text-xs)', textAlign: 'center', wordBreak: 'break-all' }}>
             {inviteUrl}
           </div>
         </div>
+
+        {friendsOpen && (
+          <div className="card" style={{ display: 'grid', gap: 'var(--sp-sm)' }}>
+            <div className="flex justify-between">
+              <strong>Invitar amigos</strong>
+              <span className="text-muted">{selectedFriendIds.length} seleccionados</span>
+            </div>
+            {friends.length ? friends.map((friend) => {
+              const selected = selectedFriendIds.includes(friend.user_id);
+              return (
+                <button
+                  key={friend.user_id}
+                  className={`player-card ${selected ? 'selected' : ''}`}
+                  style={{ width: '100%', textAlign: 'left' }}
+                  onClick={() => {
+                    setSelectedFriendIds((current) =>
+                      selected ? current.filter((id) => id !== friend.user_id) : [...current, friend.user_id]
+                    );
+                  }}
+                >
+                  <span className="player-name">{friend.display_name}</span>
+                  <span className="text-muted">@{friend.username}</span>
+                </button>
+              );
+            }) : (
+              <p className="text-muted">Todavia no tenes amigos agregados. El link y QR siguen siendo la forma principal.</p>
+            )}
+            <button className="btn btn-primary" disabled={selectedFriendIds.length === 0} onClick={handleInviteFriends}>
+              Enviar invitaciones
+            </button>
+            {inviteStatus && <div className="info-box">{inviteStatus}</div>}
+          </div>
+        )}
 
         {/* Lista de jugadores */}
         <div>
@@ -175,7 +265,18 @@ export default function MultiHostPage() {
                     </span>
                   )}
                 </span>
-                <span style={{ color: 'var(--success)', fontSize: 'var(--text-xs)' }}>● Conectado</span>
+                <span
+                  style={{
+                    color: currentTime === null || currentTime - (player.lastSeenAt ?? player.joinedAt) <= PLAYER_DISCONNECTED_AFTER_MS
+                      ? 'var(--success)'
+                      : 'var(--warning)',
+                    fontSize: 'var(--text-xs)',
+                  }}
+                >
+                  {currentTime === null || currentTime - (player.lastSeenAt ?? player.joinedAt) <= PLAYER_DISCONNECTED_AFTER_MS
+                    ? '● Conectado'
+                    : '● Desconectado'}
+                </span>
               </div>
             ))}
           </div>

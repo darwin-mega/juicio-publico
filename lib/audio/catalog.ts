@@ -5,7 +5,7 @@ export const AUDIO_STORAGE_KEY = 'jp_audio_preferences_v1';
 export const DEFAULT_AUDIO_PREFERENCES: AudioPreferences = {
   muted: false,
   masterVolume: 0.68,
-  musicVolume: 0.46,
+  musicVolume: 0.4,
   sfxVolume: 0.78,
 };
 
@@ -13,20 +13,29 @@ export const SOUND_CATALOG: Record<SoundKey, SoundDefinition> = {
   'ambience.lobby': {
     category: 'ambience',
     channel: 'music',
-    defaultVolume: 0.18,
+    defaultVolume: 0.14,
     fadeInMs: 1100,
-    fadeOutMs: 450,
+    fadeOutMs: 650,
     loop: true,
     sources: ['/audio/ambience/lobby.mp3', '/Music/musica-fondo.mp3'],
   },
   'ambience.match': {
     category: 'ambience',
     channel: 'music',
-    defaultVolume: 0.24,
+    defaultVolume: 0.17,
     fadeInMs: 900,
-    fadeOutMs: 450,
+    fadeOutMs: 650,
     loop: true,
     sources: ['/audio/ambience/match.mp3', '/Music/musica-fondo.mp3'],
+  },
+  'ambience.news': {
+    category: 'ambience',
+    channel: 'music',
+    defaultVolume: 0.4,
+    fadeInMs: 180,
+    fadeOutMs: 700,
+    loop: true,
+    sources: ['/Music/noticias.mp3'],
   },
 
   'ui.click': {
@@ -132,8 +141,8 @@ export const SOUND_CATALOG: Record<SoundKey, SoundDefinition> = {
     category: 'game',
     channel: 'sfx',
     cooldownMs: 800,
-    defaultVolume: 0.55,
-    sources: ['/audio/game/news-jingle.mp3', '/Music/noticias.mp3'],
+    defaultVolume: 0.34,
+    sources: ['/audio/game/news-jingle.mp3'],
   },
   'game.death': {
     category: 'game',

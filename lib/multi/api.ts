@@ -206,6 +206,27 @@ export async function advancePhase(payload: AdvancePhasePayload): Promise<ApiRes
   });
 }
 
+export interface ControlPlayerPayload {
+  roomId: string;
+  deviceId: string;
+  targetDeviceId: string;
+  action: 'omit' | 'kick';
+  credential: string;
+}
+
+export async function controlPlayer(payload: ControlPlayerPayload): Promise<ApiResponse<MultiRoomState>> {
+  return apiFetch<MultiRoomState>('/api/multi/player-control', {
+    method: 'POST',
+    body: JSON.stringify({
+      roomId: payload.roomId,
+      targetDeviceId: payload.targetDeviceId,
+      action: payload.action,
+    }),
+    deviceId: payload.deviceId,
+    credential: payload.credential,
+  });
+}
+
 // --- Expulsar sala (host) ---
 
 export async function resetRoom(roomId: string, deviceId: string, credential: string): Promise<ApiResponse<void>> {

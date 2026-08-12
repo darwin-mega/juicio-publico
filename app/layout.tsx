@@ -3,28 +3,30 @@ import './globals.css';
 import { GameProvider } from '@/context/GameContext';
 import { MultiRoomProvider } from '@/context/MultiRoomContext';
 import GlobalAudio from '@/components/GlobalAudio';
+import NativeRuntime from '@/components/NativeRuntime';
+import OfflineNotice from '@/components/OfflineNotice';
 import PwaBootstrap from '@/components/PwaBootstrap';
 
 export const metadata: Metadata = {
-  title: 'Juicio Público',
-  description: 'Juego social presencial de deducción y engaño',
-  applicationName: 'Juicio Público',
+  applicationName: 'Juicio Publico',
+  title: 'Juicio Publico',
+  description: 'Juego social presencial de deduccion y engano',
   manifest: '/manifest.webmanifest',
+  icons: {
+    icon: '/img/Juicio-logo.png',
+    apple: '/img/Juicio-logo.png',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Juicio Publico',
+  },
   formatDetection: {
     telephone: false,
     date: false,
     address: false,
     email: false,
     url: false,
-  },
-  appleWebApp: {
-    capable: true,
-    title: 'Juicio Público',
-    statusBarStyle: 'black-translucent',
-  },
-  icons: {
-    icon: '/img/Juicio-logo.png',
-    apple: '/img/Juicio-logo.png',
   },
 };
 
@@ -43,8 +45,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body>
+        <NativeRuntime />
         <GameProvider>
           <MultiRoomProvider>
+            <OfflineNotice />
             <GlobalAudio />
             <PwaBootstrap />
             {children}

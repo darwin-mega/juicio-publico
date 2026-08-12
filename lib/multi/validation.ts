@@ -54,6 +54,12 @@ export const submitActionSchema = z.object({
   action: operativeActionSchema,
 }).strict();
 
+export const playerControlSchema = z.object({
+  roomId: roomIdSchema,
+  targetDeviceId: deviceIdSchema,
+  action: z.enum(['omit', 'kick']),
+}).strict();
+
 export function isMatchingDeviceHeader(headerDeviceId: string | null, bodyDeviceId: string): boolean {
   return headerDeviceId === bodyDeviceId;
 }

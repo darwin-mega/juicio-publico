@@ -78,12 +78,16 @@ export function startMatchAmbience(options?: { restart?: boolean }) {
   return setAmbience('ambience.match', options);
 }
 
-export function startBackgroundMusic(kind: AmbienceKey = 'ambience.match') {
-  return setAmbience(kind);
+export function startNewsAmbience(options?: { restart?: boolean }) {
+  return setAmbience('ambience.news', { fadeInMs: 180, fadeOutMs: 700, ...options });
 }
 
-export function stopBackgroundMusic() {
-  stopAmbience();
+export function startBackgroundMusic(kind: AmbienceKey = 'ambience.match', options?: { restart?: boolean }) {
+  return setAmbience(kind, options);
+}
+
+export function stopBackgroundMusic(options?: { fadeOutMs?: number }) {
+  stopAmbience(options);
 }
 
 export function playClick() {
@@ -107,12 +111,13 @@ export function playHandoff() {
 }
 
 export function playTransition() {
+  duckMusic(0.18, 120);
   return playSound('game.phaseTransition');
 }
 
 export function playNewsJingle() {
-  duckMusic(0.08, 260);
-  return playSound('game.newsJingle');
+  restoreMusic(180);
+  return startNewsAmbience({ restart: true });
 }
 
 export function playTension() {
