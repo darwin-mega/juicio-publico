@@ -1,11 +1,11 @@
 # Juicio Público — salida a producción
 
-## Regla de seguridad antes de desplegar
+## Estado del código antes de desplegar
 
-La URL `https://juicio-publico.vercel.app` contiene una versión más nueva que
-la rama `main` de GitHub. No conectar Git ni promover un deployment de este
-repositorio hasta recuperar esa fuente y reconciliar ambas versiones. Hacerlo
-antes reemplazaría el login, la landing y funciones sociales visibles.
+La fuente más nueva que estaba desplegada en Vercel ya fue recuperada y
+reconciliada con el endurecimiento de producción. Mantener juntos login,
+landing, progreso, capa social, Modo Mesa y Modo Multidispositivo en futuros
+cambios; no volver a desplegar desde una copia histórica del repositorio.
 
 ## Variables requeridas en Vercel
 
@@ -17,6 +17,13 @@ Configurar estos nombres en Production y Preview, sin copiar valores al repo:
 - `CRON_SECRET` (aleatorio, mínimo 16 caracteres)
 - `SUPABASE_URL`
 - `SUPABASE_PUBLISHABLE_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+`GOOGLE_SHEETS_REGISTRATION_WEBHOOK_URL` es opcional. Las variables heredadas
+`KV_REST_API_URL` y `KV_REST_API_TOKEN` siguen siendo compatibles, aunque para
+nuevas instalaciones se prefieren los nombres `UPSTASH_*`.
 
 El modo multidispositivo falla cerrado en producción si Redis no está
 configurado. `/api/health` debe responder `200` y reportar `rooms: redis`.
@@ -27,7 +34,8 @@ configurado. `/api/health` debe responder `200` y reportar `rooms: redis`.
 - La migración `harden_rls_and_indexes` ya está aplicada.
 - El cron diario de Vercel llama a `/api/cron/keep-supabase-active` y hace una
   lectura mínima. No inserta ni actualiza datos.
-- Activar **Leaked password protection** en Authentication > Settings.
+- **Leaked password protection** no está disponible en el plan Free actual;
+  activarlo si el proyecto cambia a un plan que lo incluya.
 - Exportar un respaldo lógico antes de cambios de esquema importantes; el plan
   Free no incluye backups programados descargables.
 
