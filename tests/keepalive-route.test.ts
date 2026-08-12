@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/cron/keep-supabase-active/route';
+import { checkStoreHealth } from '@/lib/multi/redis';
+
+vi.mock('@/lib/multi/redis', () => ({
+  checkStoreHealth: vi.fn(async () => 'redis'),
+}));
+
+const mockedCheckStoreHealth = vi.mocked(checkStoreHealth);
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -15,6 +22,7 @@ describe('Supabase keep-alive cron', () => {
     process.env.CRON_SECRET = 'test-secret-value';
     process.env.SUPABASE_URL = 'https://project.supabase.co';
     process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
+    mockedCheckStoreHealth.mockResolvedValue('redis');
   });
 
   afterEach(() => {
@@ -54,5 +62,10 @@ describe('Supabase keep-alive cron', () => {
       'https://project.supabase.co/rest/v1/player_progress_profiles?select=player_id&limit=1',
     );
     expect(fetchSpy.mock.calls[0][1]).toMatchObject({ cache: 'no-store' });
+    expect(mockedCheckStoreHealth).toHaveBeenCalledOnce();
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      services: { supabase: 'ok', store: 'redis' },
+    });
   });
 });

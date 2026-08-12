@@ -41,8 +41,8 @@ export class RoomBusyError extends Error {
 // ============================================================
 
 const USE_REDIS = !!(
-  (process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL) &&
-  (process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN)
+  (process.env.JUICIO_KV_REST_API_URL || process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL) &&
+  (process.env.JUICIO_KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN)
 );
 
 function assertStoreConfigured(): void {
@@ -68,8 +68,8 @@ let _redis: Redis | null = null;
 function getRedis(): Redis {
   if (!_redis) {
     _redis = new Redis({
-      url: (process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL)!,
-      token: (process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN)!,
+      url: (process.env.JUICIO_KV_REST_API_URL || process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL)!,
+      token: (process.env.JUICIO_KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN)!,
     });
   }
   return _redis;

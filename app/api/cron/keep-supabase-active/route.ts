@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { checkStoreHealth } from '@/lib/multi/redis';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 10;
@@ -25,24 +26,31 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const response = await fetch(
-      `${url}/rest/v1/player_progress_profiles?select=player_id&limit=1`,
-      {
-        headers: {
-          apikey: key,
-          Authorization: `Bearer ${key}`,
+    const [response, store] = await Promise.all([
+      fetch(
+        `${url}/rest/v1/player_progress_profiles?select=player_id&limit=1`,
+        {
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+          },
+          cache: 'no-store',
+          signal: AbortSignal.timeout(8_000),
         },
-        cache: 'no-store',
-        signal: AbortSignal.timeout(8_000),
-      },
-    );
+      ),
+      checkStoreHealth(),
+    ]);
 
     if (!response.ok) {
       console.error('[cron] Supabase keep-alive failed', response.status);
       return Response.json({ ok: false, error: 'Upstream unavailable' }, { status: 502 });
     }
 
-    return Response.json({ ok: true, checkedAt: new Date().toISOString() });
+    return Response.json({
+      ok: true,
+      services: { supabase: 'ok', store },
+      checkedAt: new Date().toISOString(),
+    });
   } catch (error) {
     console.error('[cron] Supabase keep-alive request failed', error instanceof Error ? error.message : 'unknown error');
     return Response.json({ ok: false, error: 'Upstream unavailable' }, { status: 502 });
