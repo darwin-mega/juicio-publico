@@ -55,7 +55,6 @@ export function createEmptyProgressStats(): PlayerProgressStats {
     },
   };
 }
-
 function getWinnerRoleFaction(role: Role): 'killers' | 'town' {
   return role === 'killer' ? 'killers' : 'town';
 }

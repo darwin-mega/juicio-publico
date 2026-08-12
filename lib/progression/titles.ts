@@ -93,4 +93,3 @@ export function chooseHighlightedTitle(stats: PlayerProgressStats): string | nul
     return groupWeight[b.group] - groupWeight[a.group];
   })[0].id;
 }
-

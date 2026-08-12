@@ -230,4 +230,3 @@ export async function getRanking(
   const profiles = (await Promise.all(ids.map((id) => getProfile(id)))).filter(Boolean);
   return buildRankingEntriesFromProfiles(profiles, period, month, limit);
 }
-

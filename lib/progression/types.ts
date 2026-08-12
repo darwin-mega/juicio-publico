@@ -153,4 +153,3 @@ export interface PlayerProfileSummary {
   unlockedTitles: ProgressTitleDefinition[];
   unlockedRewards: UnlockedProgressReward[];
 }
-

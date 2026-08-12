@@ -23,7 +23,7 @@ export default function HomePage() {
   const audio = useAudioState();
   const supabaseConfigured = hasSupabaseConfig();
   const supabase = useMemo(() => (supabaseConfigured ? createClient() : null), [supabaseConfigured]);
-  
+
   // Estado para controlar el video de apertura
   const [showIntro, setShowIntro] = useState(false);
   const [preInteraction, setPreInteraction] = useState(false);
@@ -172,7 +172,7 @@ export default function HomePage() {
       }}>
         {/* Pantalla Pre-Interacción (necesaria para el sonido) */}
         {preInteraction ? (
-          <div 
+          <div
             onClick={handleStartIntro}
             style={{
               position: 'absolute',
