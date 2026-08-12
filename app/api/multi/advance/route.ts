@@ -1,13 +1,14 @@
 // app/api/multi/advance/route.ts
-// El host avanza manualmente la fase pública.
-// Aplica a: news → trial → vote (y resolution → operative para siguiente ronda)
+// El host avanza manualmente la fase publica.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getRoom, saveRoom } from '@/lib/multi/redis';
+import { mutateRoom } from '@/lib/multi/redis';
 import { resetPendingActions } from '@/lib/multi/gameLogic';
-import type { MultiGameState } from '@/lib/multi/types';
+import { requireMultiSession } from '@/lib/multi/session';
+import type { MultiGameState, MultiRoomState } from '@/lib/multi/types';
 
 const MANUAL_ADVANCE_PHASES: MultiGameState['phase'][] = ['news', 'trial', 'resolution'];
+type AdvanceFailure = { error: string; status: number };
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,56 +19,62 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Faltan datos.' }, { status: 400 });
     }
 
-    const room = await getRoom(roomId);
-    if (!room || !room.game) {
+    const session = requireMultiSession(req, roomId, deviceId, { hostOnly: true });
+    if (session instanceof NextResponse) return session;
+
+    const result = await mutateRoom<MultiRoomState | AdvanceFailure>(roomId, (room) => {
+      if (!room.game) {
+        return { error: 'Sala no encontrada.', status: 404 };
+      }
+
+      if (room.hostId !== deviceId) {
+        return { error: 'Solo el host puede avanzar la fase.', status: 403 };
+      }
+
+      const current = room.game.phase;
+
+      if (!MANUAL_ADVANCE_PHASES.includes(current)) {
+        return { error: `La fase "${current}" no se puede avanzar manualmente.`, status: 400 };
+      }
+
+      let nextPhase: MultiGameState['phase'];
+      let nextRound = room.game.round;
+
+      if (room.game.isOver) {
+        if (current !== 'news') {
+          return { error: 'La partida ya termino.', status: 409 };
+        }
+        nextPhase = 'resolution';
+      } else if (current === 'news') nextPhase = 'trial';
+      else if (current === 'trial') nextPhase = 'vote';
+      else {
+        nextPhase = 'operative';
+        nextRound = room.game.round + 1;
+      }
+
+      room.game.phase = nextPhase;
+      room.game.round = nextRound;
+      room.game.votes = nextPhase === 'operative' ? {} : room.game.votes;
+      room.game.skippedVotes = nextPhase === 'vote' || nextPhase === 'operative' ? {} : room.game.skippedVotes;
+      room.game.pendingActions =
+        nextPhase === 'operative'
+          ? resetPendingActions(room.players.filter((p) => p.isAlive))
+          : room.game.pendingActions;
+      room.game.trialStartedAt = nextPhase === 'trial' ? Date.now() : room.game.trialStartedAt;
+      room.updatedAt = Date.now();
+
+      return room;
+    });
+
+    if (!result) {
       return NextResponse.json({ error: 'Sala no encontrada.' }, { status: 404 });
     }
 
-    if (room.hostId !== deviceId) {
-      return NextResponse.json({ error: 'Solo el host puede avanzar la fase.' }, { status: 403 });
+    if ('error' in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
-    const current = room.game.phase;
-
-    if (!MANUAL_ADVANCE_PHASES.includes(current)) {
-      return NextResponse.json(
-        { error: `La fase "${current}" no se puede avanzar manualmente.` },
-        { status: 400 }
-      );
-    }
-
-    if (room.game.isOver) {
-      return NextResponse.json({ error: 'La partida ya terminó.' }, { status: 409 });
-    }
-
-    // Determinar siguiente fase
-    let nextPhase: MultiGameState['phase'];
-    let nextRound = room.game.round;
-
-    if (current === 'news') nextPhase = 'trial';
-    else if (current === 'trial') nextPhase = 'vote';
-    else {
-      // resolution → operative (nueva ronda)
-      nextPhase = 'operative';
-      nextRound = room.game.round + 1;
-    }
-
-    const updatedGame: MultiGameState = {
-      ...room.game,
-      phase: nextPhase,
-      round: nextRound,
-      votes: nextPhase === 'operative' ? {} : room.game.votes,
-      pendingActions:
-        nextPhase === 'operative'
-          ? resetPendingActions(room.players.filter((p) => p.isAlive))
-          : room.game.pendingActions,
-      trialStartedAt: nextPhase === 'trial' ? Date.now() : room.game.trialStartedAt,
-    };
-
-    const updatedRoom = { ...room, game: updatedGame, updatedAt: Date.now() };
-    await saveRoom(updatedRoom);
-
-    return NextResponse.json(updatedRoom);
+    return NextResponse.json(result);
   } catch (err) {
     console.error('[multi/advance]', err);
     return NextResponse.json({ error: 'Error interno.' }, { status: 500 });

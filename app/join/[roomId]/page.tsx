@@ -5,7 +5,7 @@
 // Página de ingreso a sala para jugadores que escanean el QR.
 //
 // 1. Obtiene el roomId de la URL
-// 2. Verifica que la sala existe y está en lobby
+// 2. Verifica que la sala existe
 // 3. Pide el nombre del jugador
 // 4. Llama a POST /api/multi/join
 // 5. Redirige a /multi/game/[roomId]
@@ -45,11 +45,7 @@ export default function JoinPage() {
         router.replace(`/multi/game/${roomId}`);
         return;
       }
-      if (room.status !== 'lobby') {
-        setRoomStatus('started');
-        return;
-      }
-      setRoomStatus('ok');
+      setRoomStatus(room.status === 'lobby' ? 'ok' : 'started');
     });
   }, [roomId, deviceId, router]);
 
@@ -115,23 +111,6 @@ export default function JoinPage() {
     );
   }
 
-  if (roomStatus === 'started') {
-    return (
-      <main className="page-shell" style={{ justifyContent: 'center', alignItems: 'center' }}>
-        <div className="card" style={{ textAlign: 'center', padding: 'var(--sp-xl)' }}>
-          <div style={{ fontSize: 44, marginBottom: 16 }}>🔒</div>
-          <h3>Partida en curso</h3>
-          <p className="text-muted" style={{ marginTop: 8 }}>
-            La partida de la sala <strong>{roomId}</strong> ya comenzó. No podés unirte ahora.
-          </p>
-          <button className="btn btn-ghost" style={{ marginTop: 24 }} onClick={() => router.push('/')}>
-            ← Volver al inicio
-          </button>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="page-shell">
       <div className="page-header">
@@ -157,7 +136,9 @@ export default function JoinPage() {
             Sala <strong style={{ color: 'var(--accent)' }}>{roomId}</strong>
           </p>
           <p style={{ fontSize: 'var(--text-sm)' }}>
-            Ingresá tu nombre para participar en la partida.
+            {roomStatus === 'started'
+              ? 'Si ya estabas en esta partida, ingresá el mismo nombre o entrá con tu cuenta para reconectar.'
+              : 'Ingresá tu nombre para participar en la partida.'}
           </p>
         </div>
 
@@ -184,7 +165,9 @@ export default function JoinPage() {
         )}
 
         <div className="info-box">
-          Tu dispositivo quedará vinculado a tu jugador. Si recargás la página, volvés automáticamente a la partida.
+          {roomStatus === 'started'
+            ? 'La sala sigue activa mientras dure la partida. El reingreso evita duplicados si es el mismo dispositivo o la misma cuenta.'
+            : 'Tu dispositivo quedará vinculado a tu jugador. Si recargás la página, volvés automáticamente a la partida.'}
         </div>
       </div>
 
@@ -196,7 +179,7 @@ export default function JoinPage() {
           disabled={joining || !name.trim()}
           style={{ fontSize: 'var(--text-md)', padding: '16px' }}
         >
-          {joining ? 'Entrando...' : '🚀 Entrar a la sala →'}
+          {joining ? 'Entrando...' : roomStatus === 'started' ? 'Reingresar a la partida →' : '🚀 Entrar a la sala →'}
         </button>
       </div>
     </main>

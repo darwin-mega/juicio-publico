@@ -1,10 +1,11 @@
 // app/api/multi/start/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteOperativeProposal, getRoom, saveRoom, saveSecret } from '@/lib/multi/redis';
-import {
-  assignMultiRoles,
-  createInitialGameState,
-} from '@/lib/multi/gameLogic';
+import { deleteOperativeProposal, mutateRoom, saveSecret } from '@/lib/multi/redis';
+import { assignMultiRoles, createInitialGameState } from '@/lib/multi/gameLogic';
+import { requireMultiSession } from '@/lib/multi/session';
+import type { MultiRoomState } from '@/lib/multi/types';
+
+type StartFailure = { error: string; status: number };
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,44 +16,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Faltan datos.' }, { status: 400 });
     }
 
-    const room = await getRoom(roomId);
-    if (!room) {
+    const session = requireMultiSession(req, roomId, deviceId, { hostOnly: true });
+    if (session instanceof NextResponse) return session;
+
+    const result = await mutateRoom<MultiRoomState | StartFailure>(roomId, async (room) => {
+      if (room.hostId !== deviceId) {
+        return { error: 'Solo el host puede iniciar la partida.', status: 403 };
+      }
+
+      if (room.status !== 'lobby') {
+        return { error: 'La partida ya inicio.', status: 409 };
+      }
+
+      if (room.players.length < 4) {
+        return { error: 'Se necesitan al menos 4 jugadores.', status: 400 };
+      }
+
+      const secrets = assignMultiRoles(room.players, room.config);
+
+      for (const [pid, secret] of Object.entries(secrets)) {
+        await saveSecret(roomId, pid, secret);
+        await deleteOperativeProposal(roomId, pid);
+      }
+
+      room.status = 'playing';
+      room.game = createInitialGameState(room.players);
+      room.updatedAt = Date.now();
+      return room;
+    });
+
+    if (!result) {
       return NextResponse.json({ error: 'Sala no encontrada.' }, { status: 404 });
     }
 
-    if (room.hostId !== deviceId) {
-      return NextResponse.json({ error: 'Solo el host puede iniciar la partida.' }, { status: 403 });
+    if ('error' in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
-    if (room.status !== 'lobby') {
-      return NextResponse.json({ error: 'La partida ya inició.' }, { status: 409 });
-    }
-
-    if (room.players.length < 4) {
-      return NextResponse.json({ error: 'Se necesitan al menos 4 jugadores.' }, { status: 400 });
-    }
-
-    // Asignar roles server-side (los secretos nunca van al cliente directamente)
-    const secrets = assignMultiRoles(room.players, room.config);
-
-    // Guardar cada secreto en Redis por separado
-    for (const [pid, secret] of Object.entries(secrets)) {
-      await saveSecret(roomId, pid, secret);
-      await deleteOperativeProposal(roomId, pid);
-    }
-
-    // Crear el estado de juego inicial
-    const game = createInitialGameState(room.players);
-
-    const updatedRoom = {
-      ...room,
-      status: 'playing' as const,
-      game,
-      updatedAt: Date.now(),
-    };
-
-    await saveRoom(updatedRoom);
-    return NextResponse.json(updatedRoom);
+    return NextResponse.json(result);
   } catch (err) {
     console.error('[multi/start]', err);
     return NextResponse.json({ error: 'Error interno al iniciar la partida.' }, { status: 500 });

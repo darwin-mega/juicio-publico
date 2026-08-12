@@ -154,7 +154,7 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
     : false;
 
   const hasVoted = room?.game
-    ? room.game.votes[deviceId] !== undefined
+    ? room.game.votes[deviceId] !== undefined || room.game.skippedVotes?.[deviceId] !== undefined
     : false;
 
   return (

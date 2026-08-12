@@ -38,6 +38,7 @@ export default function OperativePage() {
   const [currentIdx,             setCurrentIdx]            = useState(0);
   const [showHandoff,            setShowHandoff]           = useState(!isIndividual);
   const [killerProposals,        setKillerProposals]       = useState<string[]>([]);
+  const [copProposals,           setCopProposals]          = useState<string[]>([]);
   const [killerActedCount,       setKillerActedCount]      = useState(0);
   const [copActedCount,          setCopActedCount]         = useState(0);
   const [collectedKillTarget,    setCollectedKillTarget]   = useState<string | null>(null);
@@ -74,6 +75,11 @@ export default function OperativePage() {
 
   const actionType  = getOperativeAction(currentPlayer, aliveKillerCount, killerActedCount, aliveCopCount, copActedCount);
   const isLastPlayer = isIndividual ? true : currentIdx === passOrderIds.length - 1;
+  const currentPlayerTeammateIds = currentPlayer.role === 'killer' || currentPlayer.role === 'cop'
+    ? alivePlayers
+        .filter((p) => p.role === currentPlayer.role && p.id !== currentPlayer.id)
+        .map((p) => p.id)
+    : [];
 
   function finishAndGoToNews(k: string | null, s: string | null, i: string | null) {
     if (k) dispatch({ type: 'SET_KILL_TARGET',    targetId: k });
@@ -179,7 +185,7 @@ export default function OperativePage() {
         instruction="Esta noche, ¿a quién atacás?"
         emoji="🔪"
         color={ROLE_COLORS.killer}
-        players={alivePlayers.filter((p) => p.id !== currentPlayer.id)}
+        players={alivePlayers.filter((p) => p.id !== currentPlayer.id && !currentPlayerTeammateIds.includes(p.id))}
         maxSelectable={1}
         selected={selected}
         onToggle={(id) => {
@@ -205,7 +211,7 @@ export default function OperativePage() {
         instruction={`Elegí hasta ${max} posibles objetivos. Tu cómplice decide el final.`}
         emoji="🔪"
         color={ROLE_COLORS.killer}
-        players={alivePlayers.filter((p) => p.id !== currentPlayer.id)}
+        players={alivePlayers.filter((p) => p.id !== currentPlayer.id && !currentPlayerTeammateIds.includes(p.id))}
         maxSelectable={max}
         selected={selected}
         onToggle={(id) => {
@@ -228,7 +234,7 @@ export default function OperativePage() {
   if (actionType === 'killer-vote') {
     const candidates = killerProposals.length > 0
       ? alivePlayers.filter((p) => killerProposals.includes(p.id))
-      : alivePlayers.filter((p) => p.id !== currentPlayer.id);
+      : alivePlayers.filter((p) => p.id !== currentPlayer.id && !currentPlayerTeammateIds.includes(p.id));
     return (
       <PickerScreen
         title="Objetivo final"
@@ -276,27 +282,56 @@ export default function OperativePage() {
 
   if (actionType === 'cop') {
     const isTwoCopsFirst = aliveCopCount > 1 && copActedCount === 0;
+    const isTwoCopsSecond = aliveCopCount > 1 && copActedCount === 1;
+    const max = Math.min(3, alivePlayers.filter((p) => p.id !== currentPlayer.id).length);
+    const candidates = isTwoCopsSecond && copProposals.length > 0
+      ? alivePlayers.filter((p) => copProposals.includes(p.id))
+      : alivePlayers.filter((p) => p.id !== currentPlayer.id);
     return (
       <PickerScreen
         title="Investigar"
         instruction={
           isTwoCopsFirst
-            ? 'Elegí un sospechoso. Tu compañero lo confirmará.'
+            ? `Marcá hasta ${max} sospechosos. Tu compañero verá esas marcas y decidirá a quién investigar.`
+            : isTwoCopsSecond && copProposals.length > 0
+            ? 'Tu compañero marcó estos sospechosos. Elegí uno para cerrar la investigación.'
             : 'El resultado se revelará mañana para todos.'
         }
         emoji="🔍"
         color={ROLE_COLORS.cop}
-        players={alivePlayers.filter((p) => p.id !== currentPlayer.id)}
-        maxSelectable={1}
+        players={candidates}
+        maxSelectable={isTwoCopsFirst ? max : 1}
         selected={selected}
+        highlightedTargetIds={copProposals}
+        highlightedLabel="Sospechoso marcado"
         onToggle={(id) => {
+          if (isTwoCopsFirst) {
+            if (selected.includes(id)) {
+              playDeselect();
+              setSelected((current) => current.filter((item) => item !== id));
+            } else if (selected.length < max) {
+              playSelect();
+              setSelected((current) => [...current, id]);
+            }
+            return;
+          }
+          if (isTwoCopsFirst) {
+            if (selected.includes(id)) {
+              playDeselect();
+              setSelected((current) => current.filter((item) => item !== id));
+            } else if (selected.length < max) {
+              playSelect();
+              setSelected((current) => [...current, id]);
+            }
+            return;
+          }
           selected.includes(id) ? (playDeselect(), setSelected([])) : (playSelect(), setSelected([id]));
         }}
-        confirmLabel={isLastPlayer ? 'Confirmar y cerrar →' : 'Confirmar investigación →'}
+        confirmLabel={isTwoCopsFirst ? 'Enviar sospechosos →' : isLastPlayer ? 'Confirmar y cerrar →' : 'Confirmar investigación →'}
         onConfirm={() => {
           playConfirm();
           if (isTwoCopsFirst) {
-            setKillerProposals(selected);
+            setCopProposals(selected);
             setCopActedCount((c) => c + 1);
             advance();
           } else {
@@ -319,12 +354,15 @@ function PickerScreen({
   title, instruction, emoji, color, players,
   maxSelectable, selected, onToggle,
   confirmLabel, onConfirm, idx, total,
+  highlightedTargetIds, highlightedLabel,
 }: {
   title: string; instruction: string; emoji: string; color: string;
   players: Player[]; maxSelectable: number;
   selected: string[]; onToggle: (id: string) => void;
   confirmLabel: string; onConfirm: () => void;
   idx: number; total: number;
+  highlightedTargetIds?: string[];
+  highlightedLabel?: string;
 }) {
   const canConfirm = selected.length >= 1;
   const isDanger   = color === ROLE_COLORS.killer;
@@ -347,6 +385,7 @@ function PickerScreen({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' }}>
           {players.map((p, i) => {
             const isSelected = selected.includes(p.id);
+            const isHighlighted = highlightedTargetIds?.includes(p.id) ?? false;
             return (
               <button
                 key={p.id}
@@ -360,10 +399,11 @@ function PickerScreen({
                 <div
                   className={`player-card ${isSelected ? 'selected' : ''}`}
                   style={{
-                    borderColor: isSelected ? color : undefined,
+                    borderColor: isSelected || isHighlighted ? color : undefined,
                     transform: isSelected ? 'scale(1.02)' : 'scale(1)',
                     transition: 'transform 0.15s, border-color 0.15s, background 0.15s',
-                    background: isSelected ? `${color}18` : undefined,
+                    background: isSelected ? `${color}18` : isHighlighted ? `${color}10` : undefined,
+                    boxShadow: isHighlighted ? `0 0 0 1px ${color}, 0 0 18px rgba(91,154,245,0.18)` : undefined,
                   }}
                 >
                   <div
@@ -376,8 +416,13 @@ function PickerScreen({
                     {p.name[0]?.toUpperCase()}
                   </div>
                   <span className="player-name">{p.name}</span>
+                  {isHighlighted && !isSelected && (
+                    <span style={{ marginLeft: 'auto', color, fontSize: 'var(--text-xs)', fontWeight: 800 }}>
+                      {highlightedLabel ?? 'Marcado'}
+                    </span>
+                  )}
                   <span style={{
-                    marginLeft: 'auto', color, fontSize: 20,
+                    marginLeft: isHighlighted && !isSelected ? 8 : 'auto', color, fontSize: 20,
                     opacity: isSelected ? 1 : 0,
                     transform: isSelected ? 'scale(1)' : 'scale(0.5)',
                     transition: 'opacity 0.15s, transform 0.15s',

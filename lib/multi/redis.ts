@@ -19,12 +19,13 @@ const PREFIX = 'jp';
 // --- Claves de Redis ---
 export const KEYS = {
   room: (roomId: RoomId) => `${PREFIX}:room:${roomId}`,
+  roomLock: (roomId: RoomId) => `${PREFIX}:lock:${roomId}`,
   secret: (roomId: RoomId, deviceId: DeviceId) => `${PREFIX}:secret:${roomId}:${deviceId}`,
   operativeProposal: (roomId: RoomId, deviceId: DeviceId) => `${PREFIX}:operative:${roomId}:${deviceId}`,
 } as const;
 
-// TTL de 4 horas para salas activas
-const ROOM_TTL_SECONDS = 4 * 60 * 60;
+// TTL amplio para que el link siga sirviendo durante partidas largas y reconexiones.
+const ROOM_TTL_SECONDS = 24 * 60 * 60;
 
 // ============================================================
 // Detección de modo: Redis real vs In-Memory
@@ -58,6 +59,7 @@ function getRedis(): import('@upstash/redis').Redis {
 
 const globalForStore = globalThis as typeof globalThis & {
   __multiStore?: Map<string, { value: unknown; expiresAt: number }>;
+  __multiRoomQueues?: Map<string, Promise<unknown>>;
 };
 
 function getStore(): Map<string, { value: unknown; expiresAt: number }> {
@@ -98,6 +100,44 @@ function memExists(key: string): boolean {
     return false;
   }
   return true;
+}
+
+function getRoomQueues(): Map<string, Promise<unknown>> {
+  if (!globalForStore.__multiRoomQueues) {
+    globalForStore.__multiRoomQueues = new Map();
+  }
+  return globalForStore.__multiRoomQueues;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function acquireRedisRoomLock(roomId: RoomId): Promise<string | null> {
+  if (!USE_REDIS) return null;
+
+  const redis = getRedis();
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const acquired = await redis.set(KEYS.roomLock(roomId), token, { nx: true, ex: 5 });
+    if (acquired) return token;
+    await sleep(50);
+  }
+
+  throw new Error(`No se pudo adquirir el lock de la sala ${roomId}`);
+}
+
+async function releaseRedisRoomLock(roomId: RoomId, token: string | null): Promise<void> {
+  if (!USE_REDIS || !token) return;
+
+  try {
+    const redis = getRedis();
+    const currentToken = await redis.get<string>(KEYS.roomLock(roomId));
+    if (currentToken === token) {
+      await redis.del(KEYS.roomLock(roomId));
+    }
+  } catch (err) {
+    console.error('[multi/redis] release lock error', err);
+  }
 }
 
 // ============================================================
@@ -197,4 +237,33 @@ export async function deleteRoom(roomId: RoomId): Promise<void> {
   } else {
     memDel(KEYS.room(roomId));
   }
+}
+
+export async function mutateRoom<T>(
+  roomId: RoomId,
+  mutator: (room: MultiRoomState) => Promise<T> | T
+): Promise<T | null> {
+  const queues = getRoomQueues();
+  const queueKey = roomId.toUpperCase();
+  const previous = queues.get(queueKey) || Promise.resolve();
+
+  const current = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const lockToken = await acquireRedisRoomLock(queueKey);
+
+      try {
+        const room = await getRoom(queueKey);
+        if (!room) return null;
+
+        const result = await mutator(room);
+        await saveRoom(room);
+        return result;
+      } finally {
+        await releaseRedisRoomLock(queueKey, lockToken);
+      }
+    });
+
+  queues.set(queueKey, current.then(() => undefined, () => undefined));
+  return current;
 }

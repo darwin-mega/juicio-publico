@@ -8,11 +8,13 @@
 // ============================================================
 
 import { Role, RoundReport } from '@/lib/game/state';
+import type { ProgressEvent } from '@/lib/progression/types';
 
 // --- Identificadores ---
 
 export type DeviceId = string; // UUID v4 generado una vez por dispositivo
 export type RoomId   = string; // 6 caracteres alfanuméricos, ej: "XK7F2A"
+export type MultiPlayerStatus = 'active' | 'out';
 
 // --- Configuración de sala ---
 
@@ -28,8 +30,12 @@ export interface MultiRoomConfig {
 
 export interface MultiPlayer {
   deviceId: DeviceId;
+  accountId?: string;
+  accountDisplayName?: string;
   name: string;
   joinedAt: number;
+  lastSeenAt?: number;
+  status?: MultiPlayerStatus;
   isAlive: boolean;
   isRevealed: boolean;
   readyForOperative: boolean; // confirmó su rol en la pantalla reveal
@@ -75,7 +81,11 @@ export interface MultiGameState {
   teamSelections?: Partial<Record<CoordinatedTeamKey, TeamOperativeSelection>>;
   // DeviceId → DeviceId del votado
   votes: Record<DeviceId, DeviceId>;
+  // DeviceId → timestamp. El host puede omitir un voto para destrabar la fase.
+  skippedVotes?: Record<DeviceId, number>;
   reports: RoundReport[];
+  progressEvents: ProgressEvent[];
+  progressAppliedAt: number | null;
   winnerFaction: 'killers' | 'town' | null;
   isOver: boolean;
   // Timestamp de inicio del timer de juicio (en ms)
