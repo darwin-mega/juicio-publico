@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMultiRoom } from '@/context/MultiRoomContext';
 import { createRoom } from '@/lib/multi/api';
-import { saveHostRoom, saveLastRoom } from '@/lib/multi/device';
+import { saveHostRoom, saveLastRoom, saveRoomCredential } from '@/lib/multi/device';
 import { getRecommendedBalance } from '@/lib/game/rules';
 import { playSound } from '@/lib/sounds';
 
@@ -67,7 +67,8 @@ export default function MultiCreatePage() {
       return;
     }
 
-    const { roomId } = result.data;
+    const { roomId, credential } = result.data;
+    saveRoomCredential(roomId, credential);
     saveHostRoom(roomId);
     saveLastRoom(roomId);
 

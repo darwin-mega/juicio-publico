@@ -21,7 +21,7 @@ export default function MultiHostPage() {
   const router = useRouter();
   const params = useParams();
   const roomId = params.roomId as string;
-  const { room, deviceId, isHost, loading, error, joinRoom } = useMultiRoom();
+  const { room, deviceId, credential, isHost, loading, error, joinRoom } = useMultiRoom();
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -58,7 +58,7 @@ export default function MultiHostPage() {
   async function handleStart() {
     setStarting(true);
     setStartError(null);
-    const result = await startGame({ roomId, deviceId });
+    const result = await startGame({ roomId, deviceId, credential });
     if (!result.ok) {
       void playSound('game.error');
       setStartError(result.error);
@@ -158,7 +158,7 @@ export default function MultiHostPage() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' }}>
-            {room?.players.map((player, i) => (
+            {room?.players.map((player) => (
               <div key={player.deviceId} className="player-card" style={{
                 borderColor: player.deviceId === deviceId ? 'var(--accent)' : undefined,
               }}>

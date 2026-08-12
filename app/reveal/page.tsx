@@ -43,6 +43,8 @@ export default function RevealPage() {
   // ── TODOS LOS HOOKS PRIMERO — antes de cualquier return ───
   // En modo individual, siempre saltamos el handoff
   useEffect(() => {
+    // Sincroniza el paso visible con el modo elegido antes de entrar a esta pantalla.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isIndividual) setStep('reveal');
   }, [isIndividual]);
 
@@ -71,11 +73,13 @@ export default function RevealPage() {
 
   const currentPlayer = passOrder[effectiveIndex >= 0 ? effectiveIndex : 0];
   const isLastPlayer = isIndividual ? true : playerIndex === passOrder.length - 1;
+  const currentPlayerId = currentPlayer?.id;
+  const currentPlayerRole = currentPlayer?.role;
 
   useEffect(() => {
-    if (!currentPlayer || step !== 'reveal') return;
-    void playRoleSound(currentPlayer.role);
-  }, [currentPlayer?.id, currentPlayer?.role, step]);
+    if (!currentPlayerId || !currentPlayerRole || step !== 'reveal') return;
+    void playRoleSound(currentPlayerRole);
+  }, [currentPlayerId, currentPlayerRole, step]);
 
   // Pantalla de espera mientras se procesa el redirect
   if (noGame || needsIdentity || !currentPlayer) {

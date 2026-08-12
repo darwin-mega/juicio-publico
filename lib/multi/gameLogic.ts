@@ -327,8 +327,10 @@ export function resetPendingActions(
 export function generateRoomId(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
+  const randomValues = new Uint32Array(6);
+  crypto.getRandomValues(randomValues);
   for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
+    code += chars[randomValues[i] % chars.length];
   }
   return code;
 }

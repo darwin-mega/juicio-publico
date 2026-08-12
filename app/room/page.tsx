@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import MobileAtmosphereArt from '@/components/MobileAtmosphereArt';
 import { useGame } from '@/context/GameContext';
-import { ROLE_LABELS } from '@/lib/game/state';
 import { useLocalPlayer } from '@/lib/hooks/useLocalPlayer';
 import { playSound, startMatchAmbience } from '@/lib/sounds';
 

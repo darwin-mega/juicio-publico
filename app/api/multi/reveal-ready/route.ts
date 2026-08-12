@@ -1,53 +1,54 @@
-// app/api/multi/reveal-ready/route.ts
-// Marca a un jugador como "vio su rol y está listo".
-// Cuando todos están listos, la fase avanza automáticamente a 'operative'.
-
 import { NextRequest, NextResponse } from 'next/server';
-import { getRoom, saveRoom } from '@/lib/multi/redis';
+import { getRoom, saveRoom, withRoomLock } from '@/lib/multi/redis';
+import { authenticatePlayer } from '@/lib/multi/auth';
+import { roomCommandSchema } from '@/lib/multi/validation';
+import { parseJsonBody } from '@/lib/multi/request';
+import { enforceRateLimit } from '@/lib/multi/rateLimit';
+import { routeError } from '@/lib/multi/errors';
 
 export async function POST(req: NextRequest) {
   try {
-    const { roomId } = await req.json();
+    const parsed = await parseJsonBody(req, roomCommandSchema);
+    if (!parsed.ok) return parsed.response;
+    const { roomId } = parsed.data;
     const deviceId = req.headers.get('X-Device-Id');
-
-    if (!roomId || !deviceId) {
-      return NextResponse.json({ error: 'Faltan datos.' }, { status: 400 });
+    const limited = await enforceRateLimit(req, 'command', roomId);
+    if (limited) return limited;
+    if (!deviceId) {
+      return NextResponse.json({ error: 'Identidad de dispositivo requerida.' }, { status: 400 });
     }
 
-    const room = await getRoom(roomId);
-    if (!room || !room.game) {
-      return NextResponse.json({ error: 'Sala o juego no encontrado.' }, { status: 404 });
-    }
+    return withRoomLock(roomId, async () => {
+      const room = await getRoom(roomId);
+      if (!room || !room.game) {
+        return NextResponse.json({ error: 'Sala o juego no encontrado.' }, { status: 404 });
+      }
+      if (!(await authenticatePlayer(req, roomId, room))) {
+        return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
+      }
+      if (room.game.phase !== 'reveal') {
+        return NextResponse.json({ error: 'No es la fase de revelación.' }, { status: 409 });
+      }
 
-    if (room.game.phase !== 'reveal') {
-      return NextResponse.json({ error: 'No es la fase de revelación.' }, { status: 409 });
-    }
-
-    // Marcar jugador como listo
-    const updatedPlayers = room.players.map((p) =>
-      p.deviceId === deviceId ? { ...p, readyForOperative: true } : p
-    );
-
-    // ¿Todos los vivos están listos?
-    const alivePlayers = updatedPlayers.filter((p) => p.isAlive);
-    const allReady = alivePlayers.every((p) => p.readyForOperative);
-
-    const updatedGame = {
-      ...room.game,
-      phase: allReady ? ('operative' as const) : room.game.phase,
-    };
-
-    const updatedRoom = {
-      ...room,
-      players: updatedPlayers,
-      game: updatedGame,
-      updatedAt: Date.now(),
-    };
-
-    await saveRoom(updatedRoom);
-    return NextResponse.json(updatedRoom);
-  } catch (err) {
-    console.error('[multi/reveal-ready]', err);
-    return NextResponse.json({ error: 'Error interno.' }, { status: 500 });
+      const updatedPlayers = room.players.map((player) =>
+        player.deviceId === deviceId ? { ...player, readyForOperative: true } : player
+      );
+      const allReady = updatedPlayers
+        .filter((player) => player.isAlive)
+        .every((player) => player.readyForOperative);
+      const updatedRoom = {
+        ...room,
+        players: updatedPlayers,
+        game: {
+          ...room.game,
+          phase: allReady ? ('operative' as const) : room.game.phase,
+        },
+        updatedAt: Date.now(),
+      };
+      await saveRoom(updatedRoom);
+      return NextResponse.json(updatedRoom);
+    });
+  } catch (error) {
+    return routeError('[multi/reveal-ready]', error);
   }
 }

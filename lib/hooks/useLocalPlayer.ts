@@ -7,6 +7,8 @@ export function useLocalPlayer() {
 
   useEffect(() => {
     const stored = localStorage.getItem('juicio-player-id');
+    // Sincronización inicial con la identidad persistida del jugador.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPlayerId(stored);
   }, []);
 

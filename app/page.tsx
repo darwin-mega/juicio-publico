@@ -29,6 +29,8 @@ export default function HomePage() {
   useEffect(() => {
     const hasSeenIntro = sessionStorage.getItem('jp_intro_seen');
     if (hasSeenIntro) {
+      // Hidratación del estado visual desde sessionStorage.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowIntro(false);
       setPreInteraction(false);
       restoreMusic(600);

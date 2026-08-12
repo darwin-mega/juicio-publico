@@ -1,66 +1,66 @@
-// app/api/multi/join/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getRoom, saveRoom } from '@/lib/multi/redis';
+import { getRoom, saveRoom, withRoomLock } from '@/lib/multi/redis';
+import { authenticatePlayer, issuePlayerCredential } from '@/lib/multi/auth';
 import type { MultiPlayer } from '@/lib/multi/types';
+import { isMatchingDeviceHeader, joinRoomSchema } from '@/lib/multi/validation';
+import { parseJsonBody } from '@/lib/multi/request';
+import { enforceRateLimit } from '@/lib/multi/rateLimit';
+import { routeError } from '@/lib/multi/errors';
 
 export async function POST(req: NextRequest) {
   try {
-    const { roomId, name, deviceId } = await req.json();
-
-    if (!roomId || !name?.trim() || !deviceId) {
-      return NextResponse.json({ error: 'Faltan datos obligatorios.' }, { status: 400 });
+    const parsed = await parseJsonBody(req, joinRoomSchema);
+    if (!parsed.ok) return parsed.response;
+    const { roomId, name, deviceId } = parsed.data;
+    if (!isMatchingDeviceHeader(req.headers.get('X-Device-Id'), deviceId)) {
+      return NextResponse.json({ error: 'Identidad de dispositivo inválida.' }, { status: 400 });
     }
+    const limited = await enforceRateLimit(req, 'join', roomId);
+    if (limited) return limited;
 
-    const room = await getRoom(roomId);
-    if (!room) {
-      return NextResponse.json({ error: 'Sala no encontrada.' }, { status: 404 });
-    }
-
-    if (room.status !== 'lobby') {
-      // Permitir reconexión si el jugador ya estaba en la sala
-      const existing = room.players.find((p) => p.deviceId === deviceId);
-      if (existing) {
-        return NextResponse.json(room);
+    return withRoomLock(roomId, async () => {
+      const room = await getRoom(roomId);
+      if (!room) {
+        return NextResponse.json({ error: 'Sala no encontrada.' }, { status: 404 });
       }
-      return NextResponse.json({ error: 'La partida ya comenzó.' }, { status: 409 });
-    }
 
-    // Verificar si ya está unido (reconexión)
-    const already = room.players.find((p) => p.deviceId === deviceId);
-    if (already) {
-      return NextResponse.json(room);
-    }
+      const existing = room.players.find((player) => player.deviceId === deviceId);
+      if (existing) {
+        if (!(await authenticatePlayer(req, roomId, room))) {
+          return NextResponse.json({ error: 'Credencial de reconexión inválida.' }, { status: 401 });
+        }
+        return NextResponse.json({ room, credential: req.headers.get('X-Player-Credential') });
+      }
 
-    // Verificar que no exista otro jugador con el mismo nombre
-    const nameTaken = room.players.some(
-      (p) => p.name.toLowerCase() === name.trim().toLowerCase()
-    );
-    if (nameTaken) {
-      return NextResponse.json(
-        { error: 'Ese nombre ya está en uso en esta sala.' },
-        { status: 409 }
-      );
-    }
+      if (room.status !== 'lobby') {
+        return NextResponse.json({ error: 'La partida ya comenzó.' }, { status: 409 });
+      }
+      if (room.players.length >= 20) {
+        return NextResponse.json({ error: 'La sala alcanzó el máximo de 20 jugadores.' }, { status: 409 });
+      }
+      if (room.players.some((player) => player.name.toLocaleLowerCase('es') === name.toLocaleLowerCase('es'))) {
+        return NextResponse.json({ error: 'Ese nombre ya está en uso en esta sala.' }, { status: 409 });
+      }
 
-    const newPlayer: MultiPlayer = {
-      deviceId,
-      name: name.trim(),
-      joinedAt: Date.now(),
-      isAlive: true,
-      isRevealed: false,
-      readyForOperative: false,
-    };
+      const newPlayer: MultiPlayer = {
+        deviceId,
+        name,
+        joinedAt: Date.now(),
+        isAlive: true,
+        isRevealed: false,
+        readyForOperative: false,
+      };
+      const updatedRoom = {
+        ...room,
+        players: [...room.players, newPlayer],
+        updatedAt: Date.now(),
+      };
 
-    const updatedRoom = {
-      ...room,
-      players: [...room.players, newPlayer],
-      updatedAt: Date.now(),
-    };
-
-    await saveRoom(updatedRoom);
-    return NextResponse.json(updatedRoom);
-  } catch (err) {
-    console.error('[multi/join]', err);
-    return NextResponse.json({ error: 'Error interno al unirse a la sala.' }, { status: 500 });
+      await saveRoom(updatedRoom);
+      const credential = await issuePlayerCredential(roomId, deviceId);
+      return NextResponse.json({ room: updatedRoom, credential });
+    });
+  } catch (error) {
+    return routeError('[multi/join]', error);
   }
 }

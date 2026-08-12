@@ -100,7 +100,7 @@ function WaitingView({
         )}
 
         <p className="text-muted" style={{ fontSize: 'var(--text-xs)' }}>
-          La partida comienza cuando el host toca "Iniciar".
+          La partida comienza cuando el host toca &quot;Iniciar&quot;.
         </p>
       </div>
     </main>
@@ -114,21 +114,19 @@ function RevealView({
   me,
   secret,
   room,
-  deviceId,
   onReady,
   isReady,
 }: {
   me: MultiPlayer;
   secret: PlayerSecret | null;
   room: MultiRoomState;
-  deviceId: string;
   onReady: () => void;
   isReady: boolean;
 }) {
   useEffect(() => {
     if (!secret) return;
     void playRoleSound(secret.role);
-  }, [secret?.deviceId, secret?.role]);
+  }, [secret]);
 
   if (!secret) {
     return (
@@ -244,14 +242,12 @@ function RevealView({
 // Sub-vista: Operativo Encubierto (acción privada simultánea)
 // =============================================================
 function OperativeView({
-  me,
   secret,
   room,
   deviceId,
   hasActed,
   onAction,
 }: {
-  me: MultiPlayer;
   secret: PlayerSecret;
   room: MultiRoomState;
   deviceId: string;
@@ -817,7 +813,7 @@ function TrialView({
 }) {
   const [elapsed, setElapsed] = useState(0);
   const duration = room.config.trialDurationSeconds;
-  const startedAt = room.game?.trialStartedAt ?? Date.now();
+  const [startedAt] = useState(() => room.game?.trialStartedAt ?? Date.now());
 
   useEffect(() => {
     if (!isHost) {
@@ -1299,11 +1295,12 @@ export default function MultiGamePage() {
     hasVoted,
     loading,
     error,
+    credential,
     joinRoom,
     refresh,
   } = useMultiRoom();
 
-  const [revealDone, setRevealDone] = useState(false);
+  const [optimisticRevealRound, setOptimisticRevealRound] = useState<number | null>(null);
   const [advancing, setAdvancing] = useState(false);
   const [restarting, setRestarting] = useState(false);
 
@@ -1312,11 +1309,6 @@ export default function MultiGamePage() {
     if (roomId) joinRoom(roomId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
-
-  // Detectar si el jugador ya marcó su reveal en el estado de la sala
-  useEffect(() => {
-    setRevealDone(Boolean(myPlayer?.readyForOperative));
-  }, [myPlayer]);
 
   if (loading && !room) {
     return (
@@ -1350,28 +1342,30 @@ export default function MultiGamePage() {
   }
 
   const phase = room.game.phase;
+  const currentRound = room.game.round;
   const me = myPlayer ?? room.players[0];
+  const revealDone = Boolean(myPlayer?.readyForOperative) || optimisticRevealRound === currentRound;
 
   // Acciones
   async function handleRevealReady() {
-    await confirmReveal(roomId, deviceId);
-    setRevealDone(true);
+    await confirmReveal(roomId, deviceId, credential);
+    setOptimisticRevealRound(currentRound);
     await refresh();
   }
 
   async function handleAction(type: 'kill' | 'save' | 'inspect' | 'neutral', targetId: string | null) {
-    await submitOperativeAction({ roomId, deviceId, action: { type, targetId } });
+    await submitOperativeAction({ roomId, deviceId, credential, action: { type, targetId } });
     await refresh();
   }
 
   async function handleVote(targetId: string) {
-    await castVote({ roomId, deviceId, targetId });
+    await castVote({ roomId, deviceId, credential, targetId });
     await refresh();
   }
 
   async function handleAdvance() {
     setAdvancing(true);
-    await advancePhase({ roomId, deviceId });
+    await advancePhase({ roomId, deviceId, credential });
     await refresh();
     setAdvancing(false);
   }
@@ -1382,7 +1376,7 @@ export default function MultiGamePage() {
     }
 
     setRestarting(true);
-    const result = await restartGame({ roomId, deviceId });
+    const result = await restartGame({ roomId, deviceId, credential });
     if (!result.ok) {
       void playSound('game.error');
       setRestarting(false);
@@ -1390,7 +1384,7 @@ export default function MultiGamePage() {
     }
 
     void playSound('game.start');
-    setRevealDone(false);
+    setOptimisticRevealRound(null);
     await refresh();
     setRestarting(false);
   }
@@ -1402,7 +1396,6 @@ export default function MultiGamePage() {
         me={me}
         secret={secret}
         room={room}
-        deviceId={deviceId}
         onReady={handleRevealReady}
         isReady={revealDone}
       />
@@ -1413,7 +1406,6 @@ export default function MultiGamePage() {
     if (!secret) return null;
     return (
       <OperativeView
-        me={me}
         secret={secret}
         room={room}
         deviceId={deviceId}

@@ -15,7 +15,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useMultiRoom } from '@/context/MultiRoomContext';
 import { getRoomState, joinRoom as apiJoinRoom } from '@/lib/multi/api';
-import { saveLastRoom } from '@/lib/multi/device';
+import { getRoomCredential, saveLastRoom, saveRoomCredential } from '@/lib/multi/device';
 import { playSound } from '@/lib/sounds';
 
 export default function JoinPage() {
@@ -32,7 +32,14 @@ export default function JoinPage() {
   // Verificar que la sala existe
   useEffect(() => {
     if (!roomId || !deviceId) return;
-    getRoomState(roomId, deviceId).then((result) => {
+    const credential = getRoomCredential(roomId);
+    if (!credential) {
+      // La ausencia de credencial es un resultado de la lectura del storage externo.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRoomStatus('ok');
+      return;
+    }
+    getRoomState(roomId, deviceId, credential).then((result) => {
       if (!result.ok) {
         setRoomStatus('notfound');
         return;
@@ -72,7 +79,7 @@ export default function JoinPage() {
       roomId,
       name: name.trim(),
       deviceId,
-    });
+    }, getRoomCredential(roomId) ?? undefined);
 
     if (!result.ok) {
       void playSound('game.error');
@@ -81,6 +88,7 @@ export default function JoinPage() {
       return;
     }
 
+    saveRoomCredential(roomId, result.data.credential);
     saveLastRoom(roomId);
     void playSound('ui.joinRoom');
     router.push(`/multi/game/${roomId}`);

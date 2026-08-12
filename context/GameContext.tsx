@@ -17,7 +17,6 @@ import React, {
 import {
   GameState,
   GameConfig,
-  GamePhase,
   Player,
   createInitialState,
 } from '@/lib/game/state';
@@ -222,6 +221,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         // Solo cargar si hay una partida real en curso
         if (saved.players.length > 0 && saved.phase !== 'lobby') {
           dispatch({ type: 'LOAD_SAVED', state: saved });
+          // Hidratación inicial desde el almacenamiento externo.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setHasSave(true);
         }
       }
@@ -237,6 +238,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     try {
       if (state.players.length > 0 && state.phase !== 'lobby') {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        // Refleja el resultado de persistir correctamente la partida.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setHasSave(true);
       } else if (state.phase === 'lobby' && state.players.length === 0) {
         localStorage.removeItem(STORAGE_KEY);

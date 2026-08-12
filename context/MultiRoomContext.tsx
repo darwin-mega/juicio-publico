@@ -19,7 +19,7 @@ import React, {
   useCallback,
   ReactNode,
 } from 'react';
-import { getOrCreateDeviceId } from '@/lib/multi/device';
+import { getOrCreateDeviceId, getRoomCredential } from '@/lib/multi/device';
 import { getRoomState, getPlayerSecret } from '@/lib/multi/api';
 import type {
   MultiRoomState,
@@ -32,6 +32,7 @@ import type {
 interface MultiRoomContextValue {
   // Identidad del dispositivo actual
   deviceId: DeviceId;
+  credential: string;
   
   // Estado de la sala (actualizado por polling)
   room: MultiRoomState | null;
@@ -66,6 +67,7 @@ const OPERATIVE_POLL_INTERVAL_MS = 900;
 
 export function MultiRoomProvider({ children }: { children: ReactNode }) {
   const [deviceId, setDeviceId] = useState<DeviceId>('');
+  const [credential, setCredential] = useState('');
   const [roomId, setRoomId] = useState<string | null>(null);
   const [room, setRoom] = useState<MultiRoomState | null>(null);
   const [secret, setSecret] = useState<PlayerSecret | null>(null);
@@ -77,23 +79,25 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
 
   // Inicializar deviceId solo en el cliente
   useEffect(() => {
+    // Sincronización inicial con la identidad persistida del dispositivo.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDeviceId(getOrCreateDeviceId());
   }, []);
 
   // Función de fetch del estado actual
   const fetchRoomState = useCallback(async () => {
-    if (!roomId || !deviceId || isFetchingRef.current) return;
+    if (!roomId || !deviceId || !credential || isFetchingRef.current) return;
     isFetchingRef.current = true;
 
     try {
-      const result = await getRoomState(roomId, deviceId);
+      const result = await getRoomState(roomId, deviceId, credential);
       if (result.ok) {
         setRoom(result.data);
         setError(null);
 
         // Si la partida inició y no tenemos secreto, pedirlo
         if (result.data.status === 'playing' && (!secret || result.data.game?.phase === 'reveal')) {
-          const secretResult = await getPlayerSecret(roomId, deviceId);
+          const secretResult = await getPlayerSecret(roomId, deviceId, credential);
           if (secretResult.ok && secretResult.data) {
             setSecret(secretResult.data);
           }
@@ -101,13 +105,13 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
       } else {
         setError(result.error);
       }
-    } catch (e) {
+    } catch {
       setError('Error de conexión');
     } finally {
       isFetchingRef.current = false;
       setLoading(false);
     }
-  }, [roomId, deviceId, secret]);
+  }, [roomId, deviceId, credential, secret]);
 
   const pollIntervalMs = room?.game?.phase === 'operative'
     ? OPERATIVE_POLL_INTERVAL_MS
@@ -117,7 +121,8 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!roomId) return;
 
-    setLoading(true);
+    // Primera sincronización con el estado remoto antes de iniciar el polling.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchRoomState();
 
     pollTimerRef.current = setInterval(fetchRoomState, pollIntervalMs);
@@ -128,7 +133,9 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
   }, [roomId, fetchRoomState, pollIntervalMs]);
 
   function joinRoom(id: string) {
+    setLoading(true);
     setRoomId(id);
+    setCredential(getRoomCredential(id) ?? '');
     setSecret(null); // Limpiar secreto de sala anterior
     setRoom(null);
     setError(null);
@@ -137,6 +144,7 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
   function leaveRoom() {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     setRoomId(null);
+    setCredential('');
     setRoom(null);
     setSecret(null);
   }
@@ -161,6 +169,7 @@ export function MultiRoomProvider({ children }: { children: ReactNode }) {
     <MultiRoomContext.Provider
       value={{
         deviceId,
+        credential,
         room,
         secret,
         loading,

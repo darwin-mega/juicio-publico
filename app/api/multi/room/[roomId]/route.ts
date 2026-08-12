@@ -7,6 +7,10 @@ import {
   getCoordinatedTeamKey,
 } from '@/lib/multi/gameLogic';
 import type { OperativeProposal, PlayerOperativeAction } from '@/lib/multi/types';
+import { authenticatePlayer } from '@/lib/multi/auth';
+import { roomIdSchema } from '@/lib/multi/validation';
+import { enforceRateLimit } from '@/lib/multi/rateLimit';
+import { routeError } from '@/lib/multi/errors';
 
 function maskPendingActions(
   pendingActions: Record<string, PlayerOperativeAction | null>,
@@ -36,25 +40,31 @@ function maskPendingActions(
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { roomId: string } }
+  { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
-    const { roomId } = params;
-    if (!roomId) {
+    const roomIdResult = roomIdSchema.safeParse((await params).roomId);
+    if (!roomIdResult.success) {
       return NextResponse.json({ error: 'roomId requerido.' }, { status: 400 });
     }
+    const roomId = roomIdResult.data;
+    const limited = await enforceRateLimit(req, 'poll', roomId);
+    if (limited) return limited;
 
     const room = await getRoom(roomId);
     if (!room) {
       return NextResponse.json({ error: 'Sala no encontrada.' }, { status: 404 });
+    }
+    const viewerDeviceId = await authenticatePlayer(req, roomId, room);
+    if (!viewerDeviceId) {
+      return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
     }
 
     if (!room.game) {
       return NextResponse.json(room);
     }
 
-    const viewerDeviceId = req.headers.get('X-Device-Id');
-    const secret = viewerDeviceId ? await getSecret(roomId, viewerDeviceId) : null;
+    const secret = await getSecret(roomId, viewerDeviceId);
 
     const sanitizedGame = {
       ...room.game,
@@ -90,8 +100,7 @@ export async function GET(
       ...room,
       game: sanitizedGame,
     });
-  } catch (err) {
-    console.error('[multi/room]', err);
-    return NextResponse.json({ error: 'Error interno.' }, { status: 500 });
+  } catch (error) {
+    return routeError('[multi/room]', error);
   }
 }

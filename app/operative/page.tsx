@@ -19,7 +19,7 @@ import { useGame } from '@/context/GameContext';
 import { Player } from '@/lib/game/state';
 import { getOperativeAction, ROLE_COLORS } from '@/lib/modes/table';
 import { useLocalPlayer } from '@/lib/hooks/useLocalPlayer';
-import { playClick, playSelect, playDeselect, playHandoff, playConfirm, playTransition } from '@/lib/sounds';
+import { playSelect, playDeselect, playHandoff, playConfirm, playTransition } from '@/lib/sounds';
 
 export default function OperativePage() {
   const router = useRouter();
@@ -162,7 +162,13 @@ export default function OperativePage() {
         maxSelectable={1}
         selected={selected}
         onToggle={(id) => {
-          selected.includes(id) ? (playDeselect(), setSelected([])) : (playSelect(), setSelected([id]));
+          if (selected.includes(id)) {
+            playDeselect();
+            setSelected([]);
+          } else {
+            playSelect();
+            setSelected([id]);
+          }
         }}
         confirmLabel={isLastPlayer ? 'Finalizar →' : 'Continuar →'}
         onConfirm={() => { playConfirm(); advance(); }}
@@ -183,7 +189,13 @@ export default function OperativePage() {
         maxSelectable={1}
         selected={selected}
         onToggle={(id) => {
-          selected.includes(id) ? (playDeselect(), setSelected([])) : (playSelect(), setSelected([id]));
+          if (selected.includes(id)) {
+            playDeselect();
+            setSelected([]);
+          } else {
+            playSelect();
+            setSelected([id]);
+          }
         }}
         confirmLabel={isLastPlayer ? 'Confirmar y cerrar →' : 'Confirmar ataque →'}
         onConfirm={() => {
@@ -239,7 +251,13 @@ export default function OperativePage() {
         maxSelectable={1}
         selected={selected}
         onToggle={(id) => {
-          selected.includes(id) ? (playDeselect(), setSelected([])) : (playSelect(), setSelected([id]));
+          if (selected.includes(id)) {
+            playDeselect();
+            setSelected([]);
+          } else {
+            playSelect();
+            setSelected([id]);
+          }
         }}
         confirmLabel={isLastPlayer ? 'Confirmar y cerrar →' : 'Confirmar objetivo →'}
         onConfirm={() => {
@@ -264,7 +282,13 @@ export default function OperativePage() {
         maxSelectable={1}
         selected={selected}
         onToggle={(id) => {
-          selected.includes(id) ? (playDeselect(), setSelected([])) : (playSelect(), setSelected([id]));
+          if (selected.includes(id)) {
+            playDeselect();
+            setSelected([]);
+          } else {
+            playSelect();
+            setSelected([id]);
+          }
         }}
         confirmLabel={isLastPlayer ? 'Confirmar y cerrar →' : 'Confirmar protección →'}
         onConfirm={() => { playConfirm(); advance(undefined, selected[0]); }}
@@ -290,7 +314,13 @@ export default function OperativePage() {
         maxSelectable={1}
         selected={selected}
         onToggle={(id) => {
-          selected.includes(id) ? (playDeselect(), setSelected([])) : (playSelect(), setSelected([id]));
+          if (selected.includes(id)) {
+            playDeselect();
+            setSelected([]);
+          } else {
+            playSelect();
+            setSelected([id]);
+          }
         }}
         confirmLabel={isLastPlayer ? 'Confirmar y cerrar →' : 'Confirmar investigación →'}
         onConfirm={() => {
@@ -338,6 +368,9 @@ function PickerScreen({
         </span>
       </div>
       <div className="page-content">
+        <span className="sr-only">
+          Podés elegir hasta {maxSelectable} jugador{maxSelectable === 1 ? '' : 'es'}.
+        </span>
         {/* Instrucción */}
         <div className="card anim-fade-in" style={{ borderColor: color, padding: 'var(--sp-md)' }}>
           <p style={{ fontSize: 'var(--text-sm)' }}>{instruction}</p>

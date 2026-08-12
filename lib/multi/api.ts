@@ -17,9 +17,9 @@ import type {
 // Helper interno para hacer fetch con el header de deviceId
 async function apiFetch<T>(
   url: string,
-  options: RequestInit & { deviceId?: string } = {}
+  options: RequestInit & { deviceId?: string; credential?: string } = {}
 ): Promise<ApiResponse<T>> {
-  const { deviceId, ...fetchOptions } = options;
+  const { deviceId, credential, ...fetchOptions } = options;
   
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -28,6 +28,9 @@ async function apiFetch<T>(
   
   if (deviceId) {
     headers['X-Device-Id'] = deviceId;
+  }
+  if (credential) {
+    headers['X-Player-Credential'] = credential;
   }
   
   try {
@@ -53,6 +56,7 @@ export interface CreateRoomPayload {
 export interface CreateRoomResult {
   roomId: string;
   room: MultiRoomState;
+  credential: string;
 }
 
 export async function createRoom(payload: CreateRoomPayload): Promise<ApiResponse<CreateRoomResult>> {
@@ -71,29 +75,44 @@ export interface JoinRoomPayload {
   deviceId: string;
 }
 
-export async function joinRoom(payload: JoinRoomPayload): Promise<ApiResponse<MultiRoomState>> {
-  return apiFetch<MultiRoomState>('/api/multi/join', {
+export interface JoinRoomResult {
+  room: MultiRoomState;
+  credential: string;
+}
+
+export async function joinRoom(
+  payload: JoinRoomPayload,
+  credential?: string
+): Promise<ApiResponse<JoinRoomResult>> {
+  return apiFetch<JoinRoomResult>('/api/multi/join', {
     method: 'POST',
     body: JSON.stringify(payload),
     deviceId: payload.deviceId,
+    credential,
   });
 }
 
 // --- Obtener estado de la sala (polling) ---
 
-export async function getRoomState(roomId: string, deviceId: string): Promise<ApiResponse<MultiRoomState>> {
+export async function getRoomState(
+  roomId: string,
+  deviceId: string,
+  credential: string
+): Promise<ApiResponse<MultiRoomState>> {
   return apiFetch<MultiRoomState>(`/api/multi/room/${roomId}`, {
     method: 'GET',
     deviceId,
+    credential,
   });
 }
 
 // --- Obtener secreto del jugador ---
 
-export async function getPlayerSecret(roomId: string, deviceId: string): Promise<ApiResponse<PlayerSecret | null>> {
+export async function getPlayerSecret(roomId: string, deviceId: string, credential: string): Promise<ApiResponse<PlayerSecret | null>> {
   return apiFetch<PlayerSecret | null>(`/api/multi/secret/${roomId}`, {
     method: 'GET',
     deviceId,
+    credential,
   });
 }
 
@@ -102,31 +121,35 @@ export async function getPlayerSecret(roomId: string, deviceId: string): Promise
 export interface StartGamePayload {
   roomId: string;
   deviceId: string;
+  credential: string;
 }
 
 export async function startGame(payload: StartGamePayload): Promise<ApiResponse<MultiRoomState>> {
   return apiFetch<MultiRoomState>('/api/multi/start', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ roomId: payload.roomId }),
     deviceId: payload.deviceId,
+    credential: payload.credential,
   });
 }
 
 export async function restartGame(payload: StartGamePayload): Promise<ApiResponse<MultiRoomState>> {
   return apiFetch<MultiRoomState>('/api/multi/restart', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ roomId: payload.roomId }),
     deviceId: payload.deviceId,
+    credential: payload.credential,
   });
 }
 
 // --- Confirmar revelación de rol ---
 
-export async function confirmReveal(roomId: string, deviceId: string): Promise<ApiResponse<void>> {
+export async function confirmReveal(roomId: string, deviceId: string, credential: string): Promise<ApiResponse<void>> {
   return apiFetch<void>('/api/multi/reveal-ready', {
     method: 'POST',
     body: JSON.stringify({ roomId }),
     deviceId,
+    credential,
   });
 }
 
@@ -135,14 +158,16 @@ export async function confirmReveal(roomId: string, deviceId: string): Promise<A
 export interface SubmitActionPayload {
   roomId: string;
   deviceId: string;
+  credential: string;
   action: Omit<PlayerOperativeAction, 'submittedAt'>;
 }
 
 export async function submitOperativeAction(payload: SubmitActionPayload): Promise<ApiResponse<void>> {
   return apiFetch<void>('/api/multi/action', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ roomId: payload.roomId, action: payload.action }),
     deviceId: payload.deviceId,
+    credential: payload.credential,
   });
 }
 
@@ -151,14 +176,16 @@ export async function submitOperativeAction(payload: SubmitActionPayload): Promi
 export interface CastVotePayload {
   roomId: string;
   deviceId: string;
+  credential: string;
   targetId: string;
 }
 
 export async function castVote(payload: CastVotePayload): Promise<ApiResponse<void>> {
   return apiFetch<void>('/api/multi/vote', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ roomId: payload.roomId, targetId: payload.targetId }),
     deviceId: payload.deviceId,
+    credential: payload.credential,
   });
 }
 
@@ -167,22 +194,25 @@ export async function castVote(payload: CastVotePayload): Promise<ApiResponse<vo
 export interface AdvancePhasePayload {
   roomId: string;
   deviceId: string;
+  credential: string;
 }
 
 export async function advancePhase(payload: AdvancePhasePayload): Promise<ApiResponse<MultiRoomState>> {
   return apiFetch<MultiRoomState>('/api/multi/advance', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ roomId: payload.roomId }),
     deviceId: payload.deviceId,
+    credential: payload.credential,
   });
 }
 
 // --- Expulsar sala (host) ---
 
-export async function resetRoom(roomId: string, deviceId: string): Promise<ApiResponse<void>> {
+export async function resetRoom(roomId: string, deviceId: string, credential: string): Promise<ApiResponse<void>> {
   return apiFetch<void>('/api/multi/reset', {
     method: 'POST',
     body: JSON.stringify({ roomId }),
     deviceId,
+    credential,
   });
 }

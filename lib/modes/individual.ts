@@ -42,11 +42,18 @@ export type RoomMessage =
  *
  * TODO: implementar suscripción real a cambios de estado remoto.
  */
-export function createRoomClient(_roomCode: string) {
+export function createRoomClient(roomCode: string) {
+  void roomCode;
   return {
     connect: () => Promise.resolve(),
     disconnect: () => {},
-    send: (_msg: RoomMessage) => Promise.resolve(),
-    onMessage: (_handler: (msg: RoomMessage) => void) => () => {},
+    send: (msg: RoomMessage) => {
+      void msg;
+      return Promise.resolve();
+    },
+    onMessage: (handler: (msg: RoomMessage) => void) => {
+      void handler;
+      return () => {};
+    },
   };
 }
