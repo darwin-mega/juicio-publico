@@ -12,6 +12,7 @@ import {
   setAmbience,
   setMasterVolume,
   setMusicVolume,
+  setMuted,
   setSfxVolume,
   syncAudioFromStorage,
   toggleMute,
@@ -113,6 +114,7 @@ export default function GlobalAudio() {
   const { room, isHost } = useMultiRoom();
   const audio = useAudioState();
   const [panelOpen, setPanelOpen] = useState(false);
+  const [testStatus, setTestStatus] = useState<string | null>(null);
   const previousPathRef = useRef<string | null>(null);
   const currentPath = pathname ?? '';
   const isMultiGameRoute = currentPath.startsWith('/multi/game/');
@@ -172,6 +174,16 @@ export default function GlobalAudio() {
     void playSound(muted ? 'ui.click' : 'ui.confirm', { bypassCooldown: true });
   }
 
+  async function handleAudioTest() {
+    if (audio.muted) setMuted(false);
+    const unlocked = await unlockAudio();
+    const played = unlocked
+      ? await playSound('ui.confirm', { bypassCooldown: true, volume: 1.15 })
+      : false;
+
+    setTestStatus(played ? 'Sonido reproducido' : 'El navegador bloqueó el audio. Toca ACTIVAR e intenta de nuevo.');
+  }
+
   return (
     <div
       style={{
@@ -221,6 +233,18 @@ export default function GlobalAudio() {
           <Slider label="General" value={audio.masterVolume} onChange={setMasterVolume} />
           <Slider label="Música" value={audio.musicVolume} onChange={setMusicVolume} />
           <Slider label="Efectos" value={audio.sfxVolume} onChange={setSfxVolume} />
+
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => { void handleAudioTest(); }}
+          >
+            Probar sonido
+          </button>
+          {testStatus && (
+            <div role="status" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+              {testStatus}
+            </div>
+          )}
 
           <div className="info-box" style={{ fontSize: 'var(--text-xs)', padding: '12px var(--sp-md)' }}>
             El audio se desbloquea automáticamente al primer toque o tecla, y tus preferencias quedan guardadas.

@@ -3,6 +3,7 @@
 import type { Role } from '@/lib/game/state';
 import { AUDIO_STORAGE_KEY, DEFAULT_AUDIO_PREFERENCES, ROLE_SOUND_BY_ROLE, SOUND_CATALOG } from './catalog';
 import { playFallbackSound, startFallbackAmbience } from './fallbacks';
+import { estimateSpeechDurationMs, selectSpanishVoice } from './speech';
 import type {
   AmbienceKey,
   AudioPreferences,
@@ -10,6 +11,7 @@ import type {
   PlaySoundOptions,
   RoleSoundKey,
   SetAmbienceOptions,
+  SpeakOptions,
   SoundDefinition,
   SoundKey,
 } from './types';
@@ -53,6 +55,9 @@ class AudioManager {
   };
   private sfxGain: GainNode | null = null;
   private soundCooldowns = new Map<SoundKey, number>();
+  private speechActive = false;
+  private speechFallbackTimer: number | null = null;
+  private speechToken = 0;
   private unlockCleanup: (() => void) | null = null;
   private unlockPromise: Promise<boolean> | null = null;
 
@@ -468,6 +473,9 @@ class AudioManager {
 
   setMuted(muted: boolean) {
     this.hydratePreferences();
+    if (muted) {
+      this.stopSpeech();
+    }
     this.prefState = { ...this.prefState, muted };
     this.persistPreferences();
     this.applyMix();
@@ -623,6 +631,88 @@ class AudioManager {
 
   restoreMusic(durationMs = 900) {
     this.fadeMusicDuck(1, durationMs);
+  }
+
+  speak(text: string, options: SpeakOptions = {}) {
+    this.hydratePreferences();
+
+    if (
+      typeof window === 'undefined' ||
+      typeof window.speechSynthesis === 'undefined' ||
+      typeof SpeechSynthesisUtterance === 'undefined' ||
+      this.prefState.muted ||
+      !text.trim()
+    ) {
+      return false;
+    }
+
+    const effectiveVolume = clamp(
+      this.prefState.masterVolume * this.prefState.sfxVolume * clamp(options.volume ?? 1),
+    );
+    if (effectiveVolume <= 0.01) {
+      return false;
+    }
+
+    const synth = window.speechSynthesis;
+    const token = ++this.speechToken;
+    const utterance = new SpeechSynthesisUtterance(text);
+    const rate = clamp(options.rate ?? 0.88, 0.5, 2);
+    const voice = selectSpanishVoice(synth.getVoices());
+
+    if (this.speechFallbackTimer !== null) {
+      window.clearTimeout(this.speechFallbackTimer);
+      this.speechFallbackTimer = null;
+    }
+
+    synth.cancel();
+    utterance.lang = voice?.lang ?? options.lang ?? 'es-UY';
+    utterance.pitch = clamp(options.pitch ?? 0.82, 0.5, 1.5);
+    utterance.rate = rate;
+    utterance.volume = effectiveVolume;
+    if (voice) utterance.voice = voice;
+
+    const finish = () => {
+      if (token !== this.speechToken) return;
+      this.speechActive = false;
+      if (this.speechFallbackTimer !== null) {
+        window.clearTimeout(this.speechFallbackTimer);
+        this.speechFallbackTimer = null;
+      }
+      this.restoreMusic(700);
+    };
+
+    utterance.onend = finish;
+    utterance.onerror = finish;
+    this.speechActive = true;
+    this.duckMusic(options.duckLevel ?? 0.08, 220);
+    this.speechFallbackTimer = window.setTimeout(() => {
+      if (token !== this.speechToken) return;
+      synth.cancel();
+      finish();
+    }, estimateSpeechDurationMs(text, rate));
+
+    try {
+      synth.resume();
+      synth.speak(utterance);
+      return true;
+    } catch {
+      finish();
+      return false;
+    }
+  }
+
+  stopSpeech() {
+    const hadActiveSpeech = this.speechActive || this.speechFallbackTimer !== null;
+    this.speechToken += 1;
+    this.speechActive = false;
+    if (this.speechFallbackTimer !== null && typeof window !== 'undefined') {
+      window.clearTimeout(this.speechFallbackTimer);
+      this.speechFallbackTimer = null;
+    }
+    if (typeof window !== 'undefined' && typeof window.speechSynthesis !== 'undefined') {
+      window.speechSynthesis.cancel();
+    }
+    if (hadActiveSpeech) this.restoreMusic(500);
   }
 
   async playRole(role: Role, options?: PlaySoundOptions) {

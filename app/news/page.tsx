@@ -6,8 +6,9 @@ import { useGame } from '@/context/GameContext';
 import { ROLE_LABELS } from '@/lib/game/state';
 import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
 import {
+  announceDeath,
   playNewsJingle, playDeath, playSaved, playCalm,
-  playAccusation, playInnocent, playTransition, restoreMusic,
+  playAccusation, playInnocent, playTransition, restoreMusic, stopVoiceAnnouncement,
 } from '@/lib/sounds';
 
 type Stage = 'jingle' | 'main' | 'cop' | 'done';
@@ -37,16 +38,28 @@ export default function NewsPage() {
     }
 
     // Jingle inmediato al montar
-    playNewsJingle();
+    void playNewsJingle();
+
+    let eventSoundTimer: ReturnType<typeof setTimeout> | undefined;
+    let voiceTimer: ReturnType<typeof setTimeout> | undefined;
 
     // Después del jingle (~3.2s) → mostrar titular
     const t1 = setTimeout(() => {
       setStage('main');
       setHeadlineReady(true);
       // Sonido según tipo de evento
-      if      (newsEvent?.type === 'death') setTimeout(playDeath, 300);
-      else if (newsEvent?.type === 'saved') setTimeout(playSaved, 300);
-      else                                   setTimeout(playCalm,  300);
+      eventSoundTimer = setTimeout(() => {
+        if (newsEvent?.type === 'death') {
+          void playDeath();
+          if (newsEvent.victimName) {
+            voiceTimer = setTimeout(() => announceDeath(newsEvent.victimName!), 550);
+          }
+        } else if (newsEvent?.type === 'saved') {
+          void playSaved();
+        } else {
+          void playCalm();
+        }
+      }, 300);
     }, 3300);
 
     // Después del titular (3s) → sección policial (si existe)
@@ -57,6 +70,9 @@ export default function NewsPage() {
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
+      if (eventSoundTimer) clearTimeout(eventSoundTimer);
+      if (voiceTimer) clearTimeout(voiceTimer);
+      stopVoiceAnnouncement();
       restoreMusic(700);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -210,6 +226,15 @@ export default function NewsPage() {
                   </div>
                 </div>
               </div>
+            )}
+            {newsEvent.type === 'death' && newsEvent.victimName && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => announceDeath(newsEvent.victimName!)}
+                style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
+              >
+                Repetir anuncio
+              </button>
             )}
           </div>
         )}

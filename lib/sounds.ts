@@ -2,6 +2,7 @@
 
 import type { Role } from '@/lib/game/state';
 import { audioManager } from './audio/manager';
+import { buildDeathAnnouncement } from './audio/speech';
 import type { AmbienceKey, PlaySoundOptions, SoundKey } from './audio/types';
 
 export type { AmbienceKey, AudioPreferences, AudioSnapshot, SoundKey } from './audio/types';
@@ -68,6 +69,20 @@ export function syncAudioFromStorage() {
 
 export function unlockAudio() {
   return audioManager.unlock();
+}
+
+export function announceDeath(victimName: string) {
+  return audioManager.speak(buildDeathAnnouncement(victimName), {
+    duckLevel: 0.06,
+    lang: 'es-UY',
+    pitch: 0.8,
+    rate: 0.86,
+    volume: 0.95,
+  });
+}
+
+export function stopVoiceAnnouncement() {
+  audioManager.stopSpeech();
 }
 
 export function startLobbyAmbience(options?: { restart?: boolean }) {

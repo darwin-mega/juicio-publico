@@ -62,6 +62,14 @@ export interface PlaySoundOptions {
   volume?: number;
 }
 
+export interface SpeakOptions {
+  duckLevel?: number;
+  lang?: string;
+  pitch?: number;
+  rate?: number;
+  volume?: number;
+}
+
 export interface SetAmbienceOptions {
   fadeInMs?: number;
   fadeOutMs?: number;

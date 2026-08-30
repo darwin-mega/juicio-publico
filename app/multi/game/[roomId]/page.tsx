@@ -719,10 +719,11 @@ function OperativeView({
 // =============================================================
 import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
 import {
+  announceDeath,
   playNewsJingle, playDeath, playSaved, playCalm,
   playAccusation, playInnocent, playTransition,
   stopBackgroundMusic, playVictory, playDefeat, playExpelled,
-  duckMusic, playRoleSound, playSound, restoreMusic,
+  duckMusic, playRoleSound, playSound, restoreMusic, stopVoiceAnnouncement,
 } from '@/lib/sounds';
 
 type NewsStage = 'jingle' | 'main' | 'cop' | 'done';
@@ -747,9 +748,13 @@ function NewsView({
   const newsEvent = lastReport ? deriveNewsEvent(lastReport) : null;
   const hasCop = !!newsEvent?.cop;
   const currentRound = room.game?.round ?? 0;
+  const newsType = newsEvent?.type;
+  const victimName = newsEvent?.victimName ?? null;
 
   // ── Secuencia de revelación ───────────────────────────────
   useEffect(() => {
+    if (!newsType) return;
+
     // Si ya procesamos esta ronda, saltamos al final para no repetir cinemática al recargar
     if (playedForRoundRef.current === currentRound) {
       setStage('done');
@@ -760,9 +765,12 @@ function NewsView({
 
     // Jingle inmediato
     if (isHost) {
-      playNewsJingle();
+      void playNewsJingle();
     }
     playedForRoundRef.current = currentRound;
+
+    let eventSoundTimer: ReturnType<typeof setTimeout> | undefined;
+    let voiceTimer: ReturnType<typeof setTimeout> | undefined;
 
     // Secuencia igual a Modo Mesa
     const t1 = setTimeout(() => {
@@ -772,9 +780,18 @@ function NewsView({
         return;
       }
 
-      if      (newsEvent?.type === 'death') setTimeout(playDeath, 300);
-      else if (newsEvent?.type === 'saved') setTimeout(playSaved, 300);
-      else                                   setTimeout(playCalm,  300);
+      eventSoundTimer = setTimeout(() => {
+        if (newsType === 'death') {
+          void playDeath();
+          if (victimName) {
+            voiceTimer = setTimeout(() => announceDeath(victimName), 550);
+          }
+        } else if (newsType === 'saved') {
+          void playSaved();
+        } else {
+          void playCalm();
+        }
+      }, 300);
     }, 3300);
 
     const t2 = hasCop
@@ -784,9 +801,12 @@ function NewsView({
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
+      if (eventSoundTimer) clearTimeout(eventSoundTimer);
+      if (voiceTimer) clearTimeout(voiceTimer);
+      if (isHost) stopVoiceAnnouncement();
       restoreMusic(700);
     };
-  }, [currentRound, newsEvent, hasCop, isHost]);
+  }, [currentRound, newsType, victimName, hasCop, isHost]);
 
   // Revelar resultado policial con sonido
   useEffect(() => {
@@ -868,6 +888,15 @@ function NewsView({
                   <div style={{ fontWeight: 700, color: eventColor }}>{newsEvent.victimName}</div>
                 </div>
               </div>
+            )}
+            {isHost && newsEvent.type === 'death' && newsEvent.victimName && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => announceDeath(newsEvent.victimName!)}
+                style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
+              >
+                Repetir anuncio
+              </button>
             )}
           </div>
         )}
