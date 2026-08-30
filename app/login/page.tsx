@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient, hasSupabaseConfig } from '@/lib/supabase/client';
+import { getSessionWithTimeout } from '@/lib/supabase/session';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,23 +19,35 @@ export default function LoginPage() {
   const isRegister = pathname.includes('register') || pathname.includes('registro');
 
   useEffect(() => {
+    let active = true;
     setError(new URLSearchParams(window.location.search).get('error'));
 
     async function checkUser() {
       if (!supabase) {
-        setLoading(false);
+        if (active) setLoading(false);
         return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        router.replace('/jugar');
-      } else {
-        setLoading(false);
+      try {
+        const session = await getSessionWithTimeout(supabase);
+        if (!active) return;
+
+        if (session) {
+          router.replace('/jugar');
+          return;
+        }
+      } catch (sessionError) {
+        console.warn('[auth/login] No se pudo verificar la sesion', sessionError);
+        if (active) setError('auth-unavailable');
+      } finally {
+        if (active) setLoading(false);
       }
     }
 
     void checkUser();
+    return () => {
+      active = false;
+    };
   }, [router, supabase]);
 
   async function handleOAuthLogin(provider: 'google' | 'apple') {
@@ -131,7 +144,13 @@ export default function LoginPage() {
           </div>
         )}
 
-        {error && error !== 'auth-code' && error !== 'missing-config' && (
+        {error === 'auth-unavailable' && (
+          <div role="alert" style={{ marginBottom: '1rem', padding: '0.85rem', border: '1px solid #92400e', borderRadius: 8, color: '#fde68a', background: '#1c1205', fontSize: '0.85rem' }}>
+            No pudimos verificar tu sesion. Revisa la conexion e intenta nuevamente.
+          </div>
+        )}
+
+        {error && error !== 'auth-code' && error !== 'auth-unavailable' && error !== 'missing-config' && (
           <div style={{ marginBottom: '1rem', padding: '0.85rem', border: '1px solid #7f1d1d', borderRadius: 8, color: '#fecaca', background: '#1f0b0b', fontSize: '0.85rem' }}>
             {error}
           </div>

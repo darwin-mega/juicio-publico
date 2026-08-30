@@ -1,10 +1,24 @@
 /** @type {import('next').NextConfig} */
+function getSupabaseCspSources() {
+  const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+  if (!configuredUrl) return [];
+
+  try {
+    const origin = new URL(configuredUrl).origin;
+    return [origin, origin.replace(/^http/, 'ws')];
+  } catch {
+    return [];
+  }
+}
+
 const nextConfig = {
   poweredByHeader: false,
   typescript: {
     ignoreBuildErrors: false,
   },
   async headers() {
+    const supabaseSources = getSupabaseCspSources();
+    const supabaseHttpSource = supabaseSources.find((source) => source.startsWith('http'));
     const securityHeaders = [
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
       { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -23,10 +37,12 @@ const nextConfig = {
             "default-src 'self'",
             "script-src 'self' 'unsafe-inline'",
             "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' blob: data:",
+            ["img-src 'self' blob: data:", supabaseHttpSource, 'https://lh3.googleusercontent.com']
+              .filter(Boolean)
+              .join(' '),
             "media-src 'self' blob:",
             "font-src 'self'",
-            "connect-src 'self'",
+            ["connect-src 'self'", ...supabaseSources].join(' '),
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",

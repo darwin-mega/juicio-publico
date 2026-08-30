@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { createClient, hasSupabaseConfig } from '@/lib/supabase/client';
+import { getSessionWithTimeout } from '@/lib/supabase/session';
 
 const HIGHLIGHTS = [
   {
@@ -50,13 +51,23 @@ export default function LandingPage() {
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
+    let active = true;
+
     async function loadSession() {
       if (!supabase) return;
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
+      try {
+        const session = await getSessionWithTimeout(supabase);
+        if (active) setUser(session?.user ?? null);
+      } catch (error) {
+        console.warn('[auth/landing] No se pudo recuperar la sesion', error);
+        if (active) setUser(null);
+      }
     }
 
     void loadSession();
+    return () => {
+      active = false;
+    };
   }, [supabase]);
 
   return (

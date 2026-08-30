@@ -16,6 +16,7 @@ import {
 } from '@/lib/sounds';
 import { useAudioState } from '@/lib/audio/hooks';
 import { createClient, hasSupabaseConfig } from '@/lib/supabase/client';
+import { getSessionWithTimeout } from '@/lib/supabase/session';
 
 export default function HomePage() {
   const router = useRouter();
@@ -33,21 +34,36 @@ export default function HomePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
+    let active = true;
+
     async function checkAuth() {
       if (!supabase) {
         router.replace('/login?error=missing-config');
         return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.replace('/login');
-      } else {
+      try {
+        const session = await getSessionWithTimeout(supabase);
+        if (!active) return;
+
+        if (!session) {
+          router.replace('/login');
+          return;
+        }
+
         setUser(session.user);
-        setAuthLoading(false);
+      } catch (error) {
+        console.error('[auth/jugar] No se pudo verificar la sesion', error);
+        if (active) router.replace('/login?error=auth-unavailable');
+      } finally {
+        if (active) setAuthLoading(false);
       }
     }
-    checkAuth();
+
+    void checkAuth();
+    return () => {
+      active = false;
+    };
   }, [router, supabase]);
 
   useEffect(() => {
