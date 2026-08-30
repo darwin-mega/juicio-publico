@@ -25,6 +25,25 @@ export function buildAccusationAnnouncement(name: string, wasKiller: boolean) {
     : `La acusación fue incorrecta. ${accusedName} era inocente.`;
 }
 
+export function buildGameOutcomeAnnouncement(winner: 'town' | 'killers') {
+  return winner === 'town'
+    ? 'El pueblo gana. Felicitaciones.'
+    : 'El pueblo cae en manos de los asesinos, quienes ganaron.';
+}
+
+export function buildResolutionAnnouncement(
+  accusedName: string | null,
+  wasKiller: boolean | null,
+  winner: 'town' | 'killers' | null,
+) {
+  const statements: string[] = [];
+  if (accusedName && wasKiller !== null) {
+    statements.push(buildAccusationAnnouncement(accusedName, wasKiller));
+  }
+  if (winner) statements.push(buildGameOutcomeAnnouncement(winner));
+  return statements.join(' ');
+}
+
 export function selectSpanishVoice(voices: SpeechSynthesisVoice[]) {
   const preferredLocales = ['es-UY', 'es-AR', 'es-419', 'es-ES', 'es-MX'];
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAccusationAnnouncement,
   buildDeathAnnouncement,
+  buildGameOutcomeAnnouncement,
+  buildResolutionAnnouncement,
   buildSavedAnnouncement,
   estimateSpeechDurationMs,
   normalizeSpokenName,
@@ -22,6 +24,22 @@ describe('anuncios de voz', () => {
     );
     expect(buildAccusationAnnouncement('Ana', false)).toBe(
       'La acusación fue incorrecta. Ana era inocente.',
+    );
+  });
+
+  it('anuncia el ganador al terminar la partida', () => {
+    expect(buildGameOutcomeAnnouncement('town')).toBe('El pueblo gana. Felicitaciones.');
+    expect(buildGameOutcomeAnnouncement('killers')).toBe(
+      'El pueblo cae en manos de los asesinos, quienes ganaron.',
+    );
+  });
+
+  it('combina el veredicto con el cierre final', () => {
+    expect(buildResolutionAnnouncement('Ana', true, 'town')).toBe(
+      'La acusación fue correcta. Ana era uno de los asesinos. El pueblo gana. Felicitaciones.',
+    );
+    expect(buildResolutionAnnouncement(null, null, 'killers')).toBe(
+      'El pueblo cae en manos de los asesinos, quienes ganaron.',
     );
   });
 

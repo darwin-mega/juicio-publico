@@ -3,8 +3,8 @@
 import type { Role } from '@/lib/game/state';
 import { audioManager } from './audio/manager';
 import {
-  buildAccusationAnnouncement,
   buildDeathAnnouncement,
+  buildResolutionAnnouncement,
   buildSavedAnnouncement,
 } from './audio/speech';
 import type { AmbienceKey, PlaySoundOptions, SoundKey } from './audio/types';
@@ -95,9 +95,13 @@ export function announceSaved() {
   });
 }
 
-export function announceAccusationResult(accusedName: string, wasKiller: boolean) {
-  return audioManager.speak(buildAccusationAnnouncement(accusedName, wasKiller), {
-    duckLevel: 0.05,
+export function announceResolutionResult(
+  accusedName: string | null,
+  wasKiller: boolean | null,
+  winner: 'town' | 'killers' | null,
+) {
+  return audioManager.speak(buildResolutionAnnouncement(accusedName, wasKiller, winner), {
+    duckLevel: 0.04,
     lang: 'es-UY',
     pitch: 0.8,
     rate: 0.86,

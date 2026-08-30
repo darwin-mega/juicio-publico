@@ -719,7 +719,7 @@ function OperativeView({
 // =============================================================
 import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
 import {
-  announceAccusationResult,
+  announceResolutionResult,
   announceDeath,
   announceSaved,
   playNewsJingle, playDeath, playSaved, playCalm,
@@ -1304,6 +1304,9 @@ function ResolutionView({
   const lastReport = room.game?.reports[room.game.reports.length - 1];
   const isOver = room.game?.isOver ?? false;
   const winner = room.game?.winnerFaction;
+  const accusedName = lastReport?.expelled ?? null;
+  const accusedWasKiller = lastReport?.expelledWasKiller ?? null;
+  const finalWinner = isOver && (winner === 'town' || winner === 'killers') ? winner : null;
 
   useEffect(() => {
     if (!isHost) {
@@ -1329,9 +1332,10 @@ function ResolutionView({
       }
     }, 400);
 
-    const announcementTimer = lastReport?.expelled && lastReport.expelledWasKiller !== null
+    const hasVerdict = Boolean(accusedName) && accusedWasKiller !== null;
+    const announcementTimer = hasVerdict || finalWinner
       ? window.setTimeout(() => {
-          announceAccusationResult(lastReport.expelled!, lastReport.expelledWasKiller!);
+          announceResolutionResult(accusedName, accusedWasKiller, finalWinner);
         }, 950)
       : undefined;
 
@@ -1342,7 +1346,7 @@ function ResolutionView({
       stopVoiceAnnouncement();
       restoreMusic(900);
     };
-  }, [isHost, isOver, winner, lastReport?.expelled, lastReport?.expelledWasKiller]);
+  }, [accusedName, accusedWasKiller, finalWinner, isHost, isOver, winner]);
 
   if (isOver) {
     return (
@@ -1376,12 +1380,12 @@ function ResolutionView({
           </div>
 
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' }}>
-            {isHost && lastReport?.expelled && lastReport.expelledWasKiller !== null && (
+            {isHost && finalWinner && (
               <button
                 className="btn btn-ghost"
-                onClick={() => announceAccusationResult(lastReport.expelled!, lastReport.expelledWasKiller!)}
+                onClick={() => announceResolutionResult(accusedName, accusedWasKiller, finalWinner)}
               >
-                Repetir veredicto
+                Repetir resultado
               </button>
             )}
             <button
@@ -1437,7 +1441,7 @@ function ResolutionView({
             {isHost && lastReport.expelledWasKiller !== null && (
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => announceAccusationResult(lastReport.expelled!, lastReport.expelledWasKiller!)}
+                onClick={() => announceResolutionResult(lastReport.expelled!, lastReport.expelledWasKiller!, null)}
                 style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
               >
                 Repetir veredicto

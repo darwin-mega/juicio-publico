@@ -13,7 +13,7 @@ import { ROLE_LABELS } from '@/lib/game/state';
 import { ROLE_COLORS, ROLE_EMOJIS } from '@/lib/modes/table';
 import { useEffect } from 'react';
 import {
-  announceAccusationResult,
+  announceResolutionResult,
   duckMusic,
   playSound,
   restoreMusic,
@@ -54,9 +54,11 @@ export default function ResolutionPage() {
       }
     }, 360);
 
-    const announcementTimer = expelled && expelledWasKiller !== null
+    const winner = state.isOver ? state.winnerFaction : null;
+    const hasVerdict = Boolean(expelled) && expelledWasKiller !== null;
+    const announcementTimer = hasVerdict || winner
       ? window.setTimeout(() => {
-          announceAccusationResult(expelled, expelledWasKiller);
+          announceResolutionResult(expelled, expelledWasKiller, winner);
         }, 950)
       : undefined;
 
@@ -149,13 +151,13 @@ export default function ResolutionPage() {
                 </span>
               </div>
             )}
-            {expelled && expelledWasKiller !== null && (
+            {state.winnerFaction && (
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => announceAccusationResult(expelled, expelledWasKiller)}
+                onClick={() => announceResolutionResult(expelled, expelledWasKiller, state.winnerFaction)}
                 style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
               >
-                Repetir veredicto
+                Repetir resultado
               </button>
             )}
           </div>
@@ -248,7 +250,7 @@ export default function ResolutionPage() {
             {expelledWasKiller !== null && (
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => announceAccusationResult(expelled, expelledWasKiller)}
+                onClick={() => announceResolutionResult(expelled, expelledWasKiller, null)}
                 style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
               >
                 Repetir veredicto
