@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { usePathname } from 'next/navigation';
 import { useGame } from '@/context/GameContext';
 import { useMultiRoom } from '@/context/MultiRoomContext';
@@ -20,6 +21,66 @@ import {
 } from '@/lib/sounds';
 import type { AmbienceKey } from '@/lib/audio/types';
 import type { MultiGamePhase } from '@/lib/multi/types';
+
+const AUDIO_DOCK_STORAGE_KEY = 'jp_audio_dock_position_v1';
+const AUDIO_DOCK_EDGE = 8;
+const AUDIO_DOCK_WIDTH = 52;
+const AUDIO_DOCK_HEIGHT = 52;
+
+interface AudioDockPosition {
+  right: number;
+  top: number;
+}
+
+interface AudioDockDrag {
+  moved: boolean;
+  pointerId: number;
+  startRight: number;
+  startTop: number;
+  startX: number;
+  startY: number;
+}
+
+function constrainDockPosition(position: AudioDockPosition) {
+  if (typeof window === 'undefined') return position;
+  return {
+    right: Math.min(
+      Math.max(AUDIO_DOCK_EDGE, window.innerWidth - AUDIO_DOCK_WIDTH - AUDIO_DOCK_EDGE),
+      Math.max(AUDIO_DOCK_EDGE, position.right),
+    ),
+    top: Math.min(
+      Math.max(AUDIO_DOCK_EDGE, window.innerHeight - AUDIO_DOCK_HEIGHT - AUDIO_DOCK_EDGE),
+      Math.max(AUDIO_DOCK_EDGE, position.top),
+    ),
+  };
+}
+
+function getDefaultDockPosition() {
+  if (typeof window === 'undefined') return { right: 12, top: 96 };
+  return constrainDockPosition({
+    right: 12,
+    top: Math.round((window.innerHeight - AUDIO_DOCK_HEIGHT) / 2),
+  });
+}
+
+function readStoredDockPosition() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(AUDIO_DOCK_STORAGE_KEY) ?? 'null') as Partial<AudioDockPosition> | null;
+    if (typeof parsed?.right !== 'number' || typeof parsed.top !== 'number') return null;
+    return constrainDockPosition({ right: parsed.right, top: parsed.top });
+  } catch {
+    return null;
+  }
+}
+
+function persistDockPosition(position: AudioDockPosition) {
+  try {
+    window.localStorage.setItem(AUDIO_DOCK_STORAGE_KEY, JSON.stringify(position));
+  } catch {
+    // La posicion sigue funcionando aunque el navegador bloquee localStorage.
+  }
+}
 
 function resolveDesiredAmbience(
   pathname: string | null,
@@ -113,9 +174,14 @@ export default function GlobalAudio() {
   const { state: gameState } = useGame();
   const { room, isHost } = useMultiRoom();
   const audio = useAudioState();
+  const [dockPosition, setDockPosition] = useState<AudioDockPosition>({ right: 12, top: 96 });
   const [panelOpen, setPanelOpen] = useState(false);
   const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [viewport, setViewport] = useState({ height: 0, width: 0 });
+  const dockPositionRef = useRef(dockPosition);
+  const dragRef = useRef<AudioDockDrag | null>(null);
   const previousPathRef = useRef<string | null>(null);
+  const suppressLauncherClickRef = useRef(false);
   const currentPath = pathname ?? '';
   const isMultiGameRoute = currentPath.startsWith('/multi/game/');
   const publicMultiAudioEnabled = !isMultiGameRoute || isHost;
@@ -136,6 +202,28 @@ export default function GlobalAudio() {
     return () => {
       teardownUnlock?.();
       window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
+  useEffect(() => {
+    const applyViewport = () => {
+      const nextPosition = constrainDockPosition(dockPositionRef.current);
+      dockPositionRef.current = nextPosition;
+      setDockPosition(nextPosition);
+      setViewport({ height: window.innerHeight, width: window.innerWidth });
+    };
+
+    const initialPosition = readStoredDockPosition() ?? getDefaultDockPosition();
+    dockPositionRef.current = initialPosition;
+    const frame = window.requestAnimationFrame(() => {
+      setDockPosition(initialPosition);
+      setViewport({ height: window.innerHeight, width: window.innerWidth });
+    });
+
+    window.addEventListener('resize', applyViewport);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', applyViewport);
     };
   }, []);
 
@@ -184,24 +272,98 @@ export default function GlobalAudio() {
     setTestStatus(played ? 'Sonido reproducido' : 'El navegador bloqueó el audio. Toca ACTIVAR e intenta de nuevo.');
   }
 
+  function handleDockPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      moved: false,
+      pointerId: event.pointerId,
+      startRight: dockPositionRef.current.right,
+      startTop: dockPositionRef.current.top,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+  }
+
+  function handleDockPointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(deltaX, deltaY) < 5) return;
+
+    drag.moved = true;
+    event.preventDefault();
+    const nextPosition = constrainDockPosition({
+      right: drag.startRight - deltaX,
+      top: drag.startTop + deltaY,
+    });
+    dockPositionRef.current = nextPosition;
+    setDockPosition(nextPosition);
+  }
+
+  function finishDockDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    suppressLauncherClickRef.current = drag.moved;
+    dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (drag.moved) persistDockPosition(dockPositionRef.current);
+  }
+
+  function handleLauncherClick() {
+    if (suppressLauncherClickRef.current) {
+      suppressLauncherClickRef.current = false;
+      return;
+    }
+    void playSound('ui.click', { bypassCooldown: true });
+    setPanelOpen((current) => !current);
+  }
+
+  function resetDockPosition() {
+    const nextPosition = getDefaultDockPosition();
+    dockPositionRef.current = nextPosition;
+    setDockPosition(nextPosition);
+    persistDockPosition(nextPosition);
+  }
+
+  const panelAbove = viewport.height > 0 && dockPosition.top > viewport.height / 2;
+  const panelOpensRight = viewport.width > 0 && dockPosition.right > viewport.width / 2;
+  const availablePanelHeight = viewport.height > 0
+    ? panelAbove
+      ? dockPosition.top - 16
+      : viewport.height - dockPosition.top - AUDIO_DOCK_HEIGHT - 16
+    : 360;
+  const panelMaxHeight = Math.max(180, Math.min(420, availablePanelHeight));
+
   return (
     <div
       style={{
         position: 'fixed',
-        top: 'max(var(--sp-md), calc(env(safe-area-inset-top) + var(--sp-sm)))',
-        right: 'max(var(--sp-md), calc(env(safe-area-inset-right) + var(--sp-md)))',
+        top: dockPosition.top,
+        right: dockPosition.right,
         zIndex: 10000,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-end',
-        gap: 'var(--sp-sm)',
+        width: AUDIO_DOCK_WIDTH,
+        height: AUDIO_DOCK_HEIGHT,
       }}
     >
       {panelOpen && (
         <div
+          id="audio-mixer-panel"
           className="card"
           style={{
+            position: 'absolute',
+            ...(panelAbove
+              ? { bottom: 'calc(100% + var(--sp-sm))' }
+              : { top: 'calc(100% + var(--sp-sm))' }),
+            ...(panelOpensRight ? { left: 0 } : { right: 0 }),
             width: 'min(280px, calc(100vw - 32px))',
+            maxHeight: panelMaxHeight,
+            overflowY: 'auto',
             padding: 'var(--sp-md)',
             display: 'flex',
             flexDirection: 'column',
@@ -235,6 +397,12 @@ export default function GlobalAudio() {
           <Slider label="Efectos" value={audio.sfxVolume} onChange={setSfxVolume} />
 
           <button
+            className={`btn ${audio.muted ? 'btn-primary' : 'btn-ghost'} btn-sm`}
+            onClick={() => { void handleMuteToggle(); }}
+          >
+            {audio.muted ? 'Activar audio' : 'Silenciar audio'}
+          </button>
+          <button
             className="btn btn-ghost btn-sm"
             onClick={() => { void handleAudioTest(); }}
           >
@@ -247,55 +415,80 @@ export default function GlobalAudio() {
           )}
 
           <div className="info-box" style={{ fontSize: 'var(--text-xs)', padding: '12px var(--sp-md)' }}>
-            El audio se desbloquea automáticamente al primer toque o tecla, y tus preferencias quedan guardadas.
+            Arrastrá el botón de audio para moverlo. La posición y tus preferencias quedan guardadas.
           </div>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={resetDockPosition}
+          >
+            Restablecer posición
+          </button>
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 'var(--sp-sm)' }}>
-        <button
-          onClick={() => {
-            void playSound('ui.click', { bypassCooldown: true });
-            setPanelOpen((current) => !current);
-          }}
-          className="btn-glass"
-          style={{
-            minWidth: 58,
-            height: 44,
-            padding: '0 14px',
-            borderRadius: 'var(--radius-full)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 'var(--text-xs)',
-            fontWeight: 800,
-            letterSpacing: '0.08em',
-          }}
-          title="Mezcla de audio"
+      <button
+        type="button"
+        className="btn-glass"
+        aria-controls="audio-mixer-panel"
+        aria-expanded={panelOpen}
+        aria-label="Audio: tocar para abrir, arrastrar para mover"
+        onClick={handleLauncherClick}
+        onPointerCancel={finishDockDrag}
+        onPointerDown={handleDockPointerDown}
+        onPointerMove={handleDockPointerMove}
+        onPointerUp={finishDockDrag}
+        style={{
+          width: AUDIO_DOCK_WIDTH,
+          height: AUDIO_DOCK_HEIGHT,
+          padding: 0,
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'grab',
+          touchAction: 'none',
+          userSelect: 'none',
+        }}
+        title="Tocá para abrir. Arrastrá para mover."
+      >
+        <svg
+          aria-hidden="true"
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         >
-          MIX
-        </button>
-
-        <button
-          onClick={handleMuteToggle}
-          className="btn-glass"
+          <path d="M11 5 6.5 8.5H3v7h3.5L11 19V5Z" />
+          {audio.muted ? (
+            <>
+              <path d="m16 9 5 5" />
+              <path d="m21 9-5 5" />
+            </>
+          ) : (
+            <>
+              <path d="M15 9.5a4 4 0 0 1 0 5" />
+              <path d="M18 7a7 7 0 0 1 0 10" />
+            </>
+          )}
+        </svg>
+        <span
+          aria-hidden="true"
           style={{
-            minWidth: 86,
-            height: 44,
-            padding: '0 14px',
-            borderRadius: 'var(--radius-full)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 'var(--text-xs)',
-            fontWeight: 800,
-            letterSpacing: '0.08em',
+            position: 'absolute',
+            top: 7,
+            right: 7,
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            background: audio.muted ? 'var(--danger)' : 'var(--success)',
+            boxShadow: audio.muted ? 'none' : '0 0 10px var(--success)',
           }}
-          title={audio.muted ? 'Activar audio' : 'Silenciar audio'}
-        >
-          {audio.muted ? 'ACTIVAR' : 'SILENCIO'}
-        </button>
-      </div>
+        />
+      </button>
     </div>
   );
 }
