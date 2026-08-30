@@ -14,6 +14,17 @@ export function buildDeathAnnouncement(name: string) {
   return `Hubo una muerte. El asesinado fue ${normalizeSpokenName(name)}.`;
 }
 
+export function buildSavedAnnouncement() {
+  return 'Hubo un intento de asesinato, pero la víctima fue salvada.';
+}
+
+export function buildAccusationAnnouncement(name: string, wasKiller: boolean) {
+  const accusedName = normalizeSpokenName(name);
+  return wasKiller
+    ? `La acusación fue correcta. ${accusedName} era uno de los asesinos.`
+    : `La acusación fue incorrecta. ${accusedName} era inocente.`;
+}
+
 export function selectSpanishVoice(voices: SpeechSynthesisVoice[]) {
   const preferredLocales = ['es-UY', 'es-AR', 'es-419', 'es-ES', 'es-MX'];
 

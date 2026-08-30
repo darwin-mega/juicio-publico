@@ -12,12 +12,22 @@ import { useGame } from '@/context/GameContext';
 import { ROLE_LABELS } from '@/lib/game/state';
 import { ROLE_COLORS, ROLE_EMOJIS } from '@/lib/modes/table';
 import { useEffect } from 'react';
-import { duckMusic, playSound, restoreMusic } from '@/lib/sounds';
+import {
+  announceAccusationResult,
+  duckMusic,
+  playSound,
+  restoreMusic,
+  stopVoiceAnnouncement,
+} from '@/lib/sounds';
 
 export default function ResolutionPage() {
   const router = useRouter();
   const { state, dispatch, clearSave } = useGame();
   const hasPlayers = state.players.length > 0;
+  const lastReport = state.reports[state.reports.length - 1];
+  const expelled = lastReport?.expelled ?? null;
+  const expelledWasKiller = lastReport?.expelledWasKiller ?? null;
+  const expelledPlayer = state.players.find((p) => p.name === expelled);
 
   useEffect(() => {
     if (!hasPlayers) {
@@ -44,21 +54,24 @@ export default function ResolutionPage() {
       }
     }, 360);
 
+    const announcementTimer = expelled && expelledWasKiller !== null
+      ? window.setTimeout(() => {
+          announceAccusationResult(expelled, expelledWasKiller);
+        }, 950)
+      : undefined;
+
     return () => {
       window.clearTimeout(voteEndTimer);
       window.clearTimeout(revealTimer);
+      if (announcementTimer) window.clearTimeout(announcementTimer);
+      stopVoiceAnnouncement();
       restoreMusic(900);
     };
-  }, [hasPlayers, state.isOver, state.winnerFaction]);
+  }, [expelled, expelledWasKiller, hasPlayers, state.isOver, state.winnerFaction]);
 
   if (!hasPlayers) {
     return null;
   }
-
-  const lastReport = state.reports[state.reports.length - 1];
-  const expelled = lastReport?.expelled ?? null;
-  const expelledWasKiller = lastReport?.expelledWasKiller ?? null;
-  const expelledPlayer = state.players.find((p) => p.name === expelled);
 
   const alivePlayers = state.players.filter((p) => p.isAlive);
   const aliveKillers = alivePlayers.filter((p) => p.role === 'killer').length;
@@ -135,6 +148,15 @@ export default function ResolutionPage() {
                   {ROLE_LABELS[expelledPlayer.role]}
                 </span>
               </div>
+            )}
+            {expelled && expelledWasKiller !== null && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => announceAccusationResult(expelled, expelledWasKiller)}
+                style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
+              >
+                Repetir veredicto
+              </button>
             )}
           </div>
 
@@ -223,6 +245,15 @@ export default function ResolutionPage() {
             >
               {expelledWasKiller ? '¡Era uno de los asesinos!' : 'Era un inocente. El pueblo se equivocó.'}
             </div>
+            {expelledWasKiller !== null && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => announceAccusationResult(expelled, expelledWasKiller)}
+                style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
+              >
+                Repetir veredicto
+              </button>
+            )}
           </div>
         ) : (
           // Empate: nadie expulsado

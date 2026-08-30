@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildAccusationAnnouncement,
   buildDeathAnnouncement,
+  buildSavedAnnouncement,
   estimateSpeechDurationMs,
   normalizeSpokenName,
 } from '@/lib/audio/speech';
@@ -8,6 +10,19 @@ import {
 describe('anuncios de voz', () => {
   it('anuncia el nombre de la victima', () => {
     expect(buildDeathAnnouncement('Pepito')).toBe('Hubo una muerte. El asesinado fue Pepito.');
+  });
+
+  it('anuncia un intento de asesinato frustrado', () => {
+    expect(buildSavedAnnouncement()).toBe('Hubo un intento de asesinato, pero la víctima fue salvada.');
+  });
+
+  it('distingue una acusacion correcta de una incorrecta', () => {
+    expect(buildAccusationAnnouncement('Pepito', true)).toBe(
+      'La acusación fue correcta. Pepito era uno de los asesinos.',
+    );
+    expect(buildAccusationAnnouncement('Ana', false)).toBe(
+      'La acusación fue incorrecta. Ana era inocente.',
+    );
   });
 
   it('normaliza nombres antes de pronunciarlos', () => {

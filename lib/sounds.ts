@@ -2,7 +2,11 @@
 
 import type { Role } from '@/lib/game/state';
 import { audioManager } from './audio/manager';
-import { buildDeathAnnouncement } from './audio/speech';
+import {
+  buildAccusationAnnouncement,
+  buildDeathAnnouncement,
+  buildSavedAnnouncement,
+} from './audio/speech';
 import type { AmbienceKey, PlaySoundOptions, SoundKey } from './audio/types';
 
 export type { AmbienceKey, AudioPreferences, AudioSnapshot, SoundKey } from './audio/types';
@@ -74,6 +78,26 @@ export function unlockAudio() {
 export function announceDeath(victimName: string) {
   return audioManager.speak(buildDeathAnnouncement(victimName), {
     duckLevel: 0.06,
+    lang: 'es-UY',
+    pitch: 0.8,
+    rate: 0.86,
+    volume: 0.95,
+  });
+}
+
+export function announceSaved() {
+  return audioManager.speak(buildSavedAnnouncement(), {
+    duckLevel: 0.06,
+    lang: 'es-UY',
+    pitch: 0.84,
+    rate: 0.88,
+    volume: 0.95,
+  });
+}
+
+export function announceAccusationResult(accusedName: string, wasKiller: boolean) {
+  return audioManager.speak(buildAccusationAnnouncement(accusedName, wasKiller), {
+    duckLevel: 0.05,
     lang: 'es-UY',
     pitch: 0.8,
     rate: 0.86,

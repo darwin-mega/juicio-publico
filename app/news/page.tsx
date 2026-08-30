@@ -7,6 +7,7 @@ import { ROLE_LABELS } from '@/lib/game/state';
 import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
 import {
   announceDeath,
+  announceSaved,
   playNewsJingle, playDeath, playSaved, playCalm,
   playAccusation, playInnocent, playTransition, restoreMusic, stopVoiceAnnouncement,
 } from '@/lib/sounds';
@@ -56,6 +57,7 @@ export default function NewsPage() {
           }
         } else if (newsEvent?.type === 'saved') {
           void playSaved();
+          voiceTimer = setTimeout(announceSaved, 550);
         } else {
           void playCalm();
         }
@@ -231,6 +233,15 @@ export default function NewsPage() {
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => announceDeath(newsEvent.victimName!)}
+                style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
+              >
+                Repetir anuncio
+              </button>
+            )}
+            {newsEvent.type === 'saved' && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={announceSaved}
                 style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
               >
                 Repetir anuncio

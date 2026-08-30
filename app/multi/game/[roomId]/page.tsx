@@ -719,7 +719,9 @@ function OperativeView({
 // =============================================================
 import { deriveNewsEvent, NEWS_ICONS, NEWS_COLORS } from '@/lib/game/news';
 import {
+  announceAccusationResult,
   announceDeath,
+  announceSaved,
   playNewsJingle, playDeath, playSaved, playCalm,
   playAccusation, playInnocent, playTransition,
   stopBackgroundMusic, playVictory, playDefeat, playExpelled,
@@ -788,6 +790,7 @@ function NewsView({
           }
         } else if (newsType === 'saved') {
           void playSaved();
+          voiceTimer = setTimeout(announceSaved, 550);
         } else {
           void playCalm();
         }
@@ -893,6 +896,15 @@ function NewsView({
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => announceDeath(newsEvent.victimName!)}
+                style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
+              >
+                Repetir anuncio
+              </button>
+            )}
+            {isHost && newsEvent.type === 'saved' && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={announceSaved}
                 style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
               >
                 Repetir anuncio
@@ -1317,12 +1329,20 @@ function ResolutionView({
       }
     }, 400);
 
+    const announcementTimer = lastReport?.expelled && lastReport.expelledWasKiller !== null
+      ? window.setTimeout(() => {
+          announceAccusationResult(lastReport.expelled!, lastReport.expelledWasKiller!);
+        }, 950)
+      : undefined;
+
     return () => {
       clearTimeout(t);
       clearTimeout(voteEndTimer);
+      if (announcementTimer) clearTimeout(announcementTimer);
+      stopVoiceAnnouncement();
       restoreMusic(900);
     };
-  }, [isHost, isOver, winner, lastReport?.expelled]);
+  }, [isHost, isOver, winner, lastReport?.expelled, lastReport?.expelledWasKiller]);
 
   if (isOver) {
     return (
@@ -1356,6 +1376,14 @@ function ResolutionView({
           </div>
 
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' }}>
+            {isHost && lastReport?.expelled && lastReport.expelledWasKiller !== null && (
+              <button
+                className="btn btn-ghost"
+                onClick={() => announceAccusationResult(lastReport.expelled!, lastReport.expelledWasKiller!)}
+              >
+                Repetir veredicto
+              </button>
+            )}
             <button
               className="btn btn-primary"
               onClick={() => {
@@ -1405,6 +1433,15 @@ function ResolutionView({
               <div className="info-box" style={{ marginTop: 'var(--sp-sm)', borderColor: lastReport.expelledWasKiller ? 'var(--danger)' : 'var(--success)', color: lastReport.expelledWasKiller ? 'var(--danger)' : 'var(--success)' }}>
                 {lastReport.expelledWasKiller ? '🔪 Era un asesino.' : '✅ Era inocente.'}
               </div>
+            )}
+            {isHost && lastReport.expelledWasKiller !== null && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => announceAccusationResult(lastReport.expelled!, lastReport.expelledWasKiller!)}
+                style={{ marginTop: 'var(--sp-sm)', width: 'auto' }}
+              >
+                Repetir veredicto
+              </button>
             )}
           </div>
         ) : (
